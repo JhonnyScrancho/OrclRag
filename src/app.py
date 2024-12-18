@@ -9,7 +9,7 @@ from ui.utils import display_thread_preview
 import pinecone
 import hashlib
 from datetime import datetime
-from config import INDEX_NAME, VALID_ENVIRONMENTS, validate_pinecone_environment
+from config import INDEX_NAME
 import logging
 
 # Configurazione logging

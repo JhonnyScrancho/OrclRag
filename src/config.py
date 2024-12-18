@@ -6,12 +6,3 @@ LLM_MODEL = "gpt-3.5-turbo"
 INDEX_NAME = "forum-index"
 CHUNK_SIZE = 1000
 CHUNK_OVERLAP = 200
-
-# Pinecone Config
-VALID_ENVIRONMENTS = [
-    "us-east1-aws",  # Environment corrente dall'interfaccia Pinecone
-]
-
-def validate_pinecone_environment(environment: str) -> bool:
-    """Valida il formato dell'environment di Pinecone."""
-    return environment in VALID_ENVIRONMENTS
