@@ -32,35 +32,59 @@ def get_thread_id(thread):
     return hashlib.md5(thread_key.encode()).hexdigest()
 
 def reinit_pinecone():
-    """Reinizializza la connessione a Pinecone."""
+    """Reinizializza la connessione a Pinecone con test DNS."""
+    import socket
+    import urllib3
+    import ssl
+    
+    # Debug DNS
+    st.write("Testing DNS resolution...")
     try:
-        # Crea la configurazione
-        openapi_config = OpenApiConfiguration.get_default_copy()
-        openapi_config.server_variables = {
-            "environment": st.secrets["PINECONE_ENVIRONMENT"]
-        }
+        ip = socket.gethostbyname('controller.us-east-1.pinecone.io')
+        st.write(f"DNS Resolution successful: {ip}")
+    except socket.gaierror as e:
+        st.write(f"DNS Resolution failed: {e}")
+        st.write("Trying alternative DNS servers...")
         
-        # Inizializza pinecone
+        # Prova con i DNS di Google
+        dns_servers = ['8.8.8.8', '8.8.4.4']
+        for dns in dns_servers:
+            try:
+                resolver = dns.resolver.Resolver()
+                resolver.nameservers = [dns]
+                answer = resolver.resolve('controller.us-east-1.pinecone.io', 'A')
+                st.write(f"Resolution with {dns} successful: {answer[0]}")
+                ip = str(answer[0])
+                break
+            except Exception as e:
+                st.write(f"Failed with {dns}: {e}")
+    
+    # Prova configurazione con pool personalizzato
+    http = urllib3.PoolManager(
+        timeout=urllib3.Timeout(connect=5, read=10),
+        retries=urllib3.Retry(3),
+        ssl_version=ssl.PROTOCOL_TLS
+    )
+    
+    # Aggiungi gli header necessari
+    headers = {
+        'Api-Key': st.secrets["PINECONE_API_KEY"],
+    }
+    
+    openapi_config = OpenApiConfiguration.get_default_copy()
+    openapi_config.http_client = http
+    openapi_config.ssl_ca_cert = None  # Disabilita la verifica del certificato per test
+    openapi_config.assert_hostname = False
+    
+    try:
         pinecone.init(
             api_key=st.secrets["PINECONE_API_KEY"],
-            environment=st.secrets["PINECONE_ENVIRONMENT"]
+            environment=st.secrets["PINECONE_ENVIRONMENT"],
+            openapi_config=openapi_config
         )
-        
-        # Ottieni l'indice
-        index = pinecone.Index(INDEX_NAME)
-        
-        # Test della connessione
-        stats = index.describe_index_stats()
-        st.write("Connection test successful:", stats)
-        
-        return index
-        
+        st.write("Pinecone initialization successful")
     except Exception as e:
-        st.error(f"Errore di connessione: {str(e)}")
-        st.write("Debug info:")
-        st.write(f"Index name: {INDEX_NAME}")
-        st.write(f"Environment: {st.secrets['PINECONE_ENVIRONMENT']}")
-        st.write(f"API Key length: {len(st.secrets['PINECONE_API_KEY'])}")
+        st.write(f"Pinecone initialization failed: {str(e)}")
         raise
 
 def process_and_index_thread(thread, embeddings, index):
