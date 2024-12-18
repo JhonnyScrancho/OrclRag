@@ -7,7 +7,6 @@ from rag.retriever import PineconeRetriever
 from rag.chain import setup_rag_chain
 from ui.utils import display_thread_preview
 import pinecone
-from pinecone import Pinecone
 import hashlib
 from datetime import datetime
 from config import INDEX_NAME
