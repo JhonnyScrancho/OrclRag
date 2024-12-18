@@ -9,3 +9,5 @@ CHUNK_OVERLAP = 200
 
 # Pinecone Config
 PINECONE_CLOUD = "aws"
+PINECONE_ENVIRONMENT = "us-east-1-aws"
+PINECONE_INDEX = "rag"
