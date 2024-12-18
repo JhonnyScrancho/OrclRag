@@ -32,13 +32,28 @@ def get_thread_id(thread):
     return hashlib.md5(thread_key.encode()).hexdigest()
 
 def reinit_pinecone():
-    """Reinizializza la connessione a Pinecone con configurazioni aggiuntive."""
+    """Reinizializza la connessione a Pinecone con test DNS."""
+    import socket
+    import urllib3
+    import ssl
+    
+    # Debug DNS
+    st.write("Testing DNS resolution...")
+    try:
+        ip = socket.gethostbyname('controller.us-east-1.pinecone.io')
+        st.write(f"DNS Resolution successful: {ip}")
+    except socket.gaierror as e:
+        st.write(f"DNS Resolution failed: {e}")
+    
+    # Prova configurazione con pool personalizzato
+    http = urllib3.PoolManager(
+        timeout=urllib3.Timeout(connect=5, read=10),
+        retries=urllib3.Retry(3),
+        ssl_version=ssl.PROTOCOL_TLS
+    )
+    
     openapi_config = OpenApiConfiguration.get_default_copy()
-    # Aumenta il timeout
-    openapi_config.connect_timeout = 30
-    openapi_config.read_timeout = 30
-    # Disabilita la verifica SSL per test
-    openapi_config.verify_ssl = False
+    openapi_config.http_client = http
     
     pinecone.init(
         api_key=st.secrets["PINECONE_API_KEY"],
