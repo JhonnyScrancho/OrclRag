@@ -9,4 +9,3 @@ CHUNK_OVERLAP = 200
 
 # Pinecone Config
 PINECONE_CLOUD = "aws"
-PINECONE_REGION = "svc.aped-4627-b74a"
