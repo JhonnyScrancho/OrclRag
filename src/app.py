@@ -34,7 +34,7 @@ def get_thread_id(thread):
 def reinit_pinecone():
     """Reinizializza la connessione a Pinecone con configurazione proxy."""
     openapi_config = OpenApiConfiguration.get_default_copy()
-    openapi_config.proxy = "http://proxy.server:3128"  # Prova con questa configurazione di proxy
+    openapi_config.proxy = "https://cloudflare-dns.com"
     
     pinecone.init(
         api_key=st.secrets["PINECONE_API_KEY"],
