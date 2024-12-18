@@ -19,15 +19,12 @@ def ensure_index_exists(pinecone_client):
         existing_indexes = pinecone_client.list_indexes()
         
         if not existing_indexes:
-            st.warning("Nessun indice trovato. Creo un nuovo indice serverless...")
-            # Create a new serverless index
+            st.warning("Nessun indice trovato. Creo un nuovo indice...")
+            # Create a new index with basic parameters
             pinecone_client.create_index(
                 name=INDEX_NAME,
                 dimension=1536,  # dimensione per OpenAI ada-002
-                metric='cosine',
-                service_type='serverless',
-                cloud='aws',
-                region='us-east-1'
+                metric='cosine'
             )
             # Wait for index to be ready
             time.sleep(1)
@@ -35,14 +32,11 @@ def ensure_index_exists(pinecone_client):
                 time.sleep(1)
             
         elif INDEX_NAME not in existing_indexes:
-            st.warning(f"L'indice {INDEX_NAME} non esiste. Creo un nuovo indice serverless...")
+            st.warning(f"L'indice {INDEX_NAME} non esiste. Creo un nuovo indice...")
             pinecone_client.create_index(
                 name=INDEX_NAME,
                 dimension=1536,
-                metric='cosine',
-                service_type='serverless',
-                cloud='aws',
-                region='us-east-1'
+                metric='cosine'
             )
             # Wait for index to be ready
             time.sleep(1)
