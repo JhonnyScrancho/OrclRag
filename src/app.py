@@ -75,24 +75,27 @@ def main():
         st.write("Tentativo di connessione a Pinecone:")
 
         try:
-            # Prima inizializziamo pinecone
+            # Prima impostiamo l'host corretto come variabile
+            PINECONE_HOST = "forum-index-p5eyqni.svc.aped-4627-b74a.pinecone.io"
+            
+            # Inizializziamo pinecone con l'host corretto
             pinecone.init(
                 api_key=st.secrets["PINECONE_API_KEY"],
                 environment=st.secrets["PINECONE_ENVIRONMENT"]
             )
             
-            # Poi otteniamo l'indice direttamente per nome
-            index = pinecone.Index(INDEX_NAME)
-            
-            # Verifichiamo che funzioni con una query di test
-            stats = index.describe_index_stats()
-            st.write("Statistiche indice:", stats)
+            # Creiamo l'indice con il nome corretto
+            index = pinecone.GRPCIndex(
+                index_name=INDEX_NAME,
+                api_key=st.secrets["PINECONE_API_KEY"],
+                host=PINECONE_HOST
+            )
             
             st.success("Connessione a Pinecone stabilita con successo!")
         except Exception as e:
             st.error(f"Errore durante la connessione a Pinecone: {str(e)}")
-            # Debug info aggiuntivo
             st.write("Debug info:")
+            st.write(f"- Host: {PINECONE_HOST}")
             st.write(f"- API Key (lunghezza): {len(st.secrets['PINECONE_API_KEY'])}")
             st.write(f"- Environment: {st.secrets['PINECONE_ENVIRONMENT']}")
             st.write(f"- Index name: {INDEX_NAME}")
