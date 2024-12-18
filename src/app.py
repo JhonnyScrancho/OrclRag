@@ -65,37 +65,25 @@ def main():
     st.write("Un sistema RAG per analizzare le discussioni del forum")
     
     try:
-        # Validazione environment
-        environment = st.secrets['PINECONE_ENVIRONMENT']
-        if not validate_pinecone_environment(environment):
-            st.error(f"""
-            Environment Pinecone non valido: {environment}
-            L'environment corretto per il tuo indice è: us-east-1
-            Per favore, aggiorna il valore di PINECONE_ENVIRONMENT nei secrets di Streamlit.
-            """)
-            return
-            
+        # Debug info
+        st.write("Debug connection info:")
+        st.write(f"Environment: {st.secrets['PINECONE_ENVIRONMENT']}")
+        st.write(f"API Key length: {len(st.secrets['PINECONE_API_KEY'])}")
+        st.write(f"Index name: {INDEX_NAME}")
+        
         # Inizializzazione Pinecone
-        try:
-            pinecone.init(
-                api_key=st.secrets["PINECONE_API_KEY"],
-                environment=environment
-            )
-        except Exception as e:
-            st.error(f"Errore di connessione a Pinecone: {str(e)}")
-            return
-            
+        st.write("Tentativo di connessione a Pinecone:")
+        pinecone.init(
+            api_key=st.secrets["PINECONE_API_KEY"],
+            environment=st.secrets["PINECONE_ENVIRONMENT"]
+        )
+        
         # Lista degli indici disponibili
-        try:
-            indexes = pinecone.list_indexes()
-            if INDEX_NAME not in indexes:
-                st.error(f"Indice {INDEX_NAME} non trovato. Indici disponibili: {', '.join(indexes)}")
-                return
-        except Exception as e:
-            st.error(f"Errore nel recupero degli indici: {str(e)}")
-            return
-            
+        indexes = pinecone.list_indexes()
+        st.write("Available indexes:", indexes)
+        
         # Ottieni l'indice esistente
+        st.write(f"Tentativo di connessione all'indice {INDEX_NAME}")
         index = pinecone.Index(INDEX_NAME)
         embeddings = get_embeddings()
         st.success("Connessione a Pinecone stabilita con successo!")
@@ -159,7 +147,14 @@ def main():
     
     except Exception as e:
         st.error(f"Errore di inizializzazione: {str(e)}")
-        logger.error("Errore di inizializzazione", exc_info=True)
+        # Debug aggiuntivo per l'errore
+        st.write("Error details:")
+        st.write(f"Error type: {type(e)}")
+        st.write(f"Error message: {str(e)}")
+        if hasattr(e, 'response'):
+            st.write(f"Response status: {e.response.status_code}")
+            st.write(f"Response headers: {e.response.headers}")
+            st.write(f"Response body: {e.response.text}")
 
 if __name__ == "__main__":
     main()
