@@ -76,19 +76,13 @@ def main():
         st.write("Tentativo di connessione a Pinecone:")
 
         try:
+            # Creiamo un'istanza di Pinecone
             pc = Pinecone(
                 api_key=st.secrets["PINECONE_API_KEY"]
             )
             
-            # Prima verifichiamo se l'indice esiste
-            available_indexes = pc.list_indexes().names()
-            st.write(f"Indici disponibili: {available_indexes}")
-            
-            if INDEX_NAME not in available_indexes:
-                st.error(f"L'indice {INDEX_NAME} non esiste!")
-                raise ValueError(f"Index {INDEX_NAME} not found")
-                
-            index = pc.Index(name=INDEX_NAME)
+            # Ottieni l'indice (Nota: utilizziamo la notazione a parentesi quadre invece del metodo Index())
+            index = pc['forum-index']
             
             # Test della connessione
             stats = index.describe_index_stats()
@@ -97,7 +91,6 @@ def main():
             st.success("Connessione a Pinecone stabilita con successo!")
         except Exception as e:
             st.error(f"Errore durante la connessione a Pinecone: {str(e)}")
-            # Aggiungiamo più dettagli per il debug
             st.write("Debug info:")
             st.write(f"- API Key (lunghezza): {len(st.secrets['PINECONE_API_KEY'])}")
             st.write(f"- Index name: {INDEX_NAME}")
