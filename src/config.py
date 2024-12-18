@@ -8,4 +8,9 @@ CHUNK_SIZE = 1000
 CHUNK_OVERLAP = 200
 
 # Pinecone Config
-PINECONE_CLOUD = "aws"
+VALID_ENVIRONMENTS = [
+    "us-east1-aws",
+    "us-west1-aws",
+    "asia-southeast1-aws",
+    "eu-west1-aws"
+]

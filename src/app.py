@@ -9,7 +9,7 @@ from ui.utils import display_thread_preview
 import pinecone
 import hashlib
 from datetime import datetime
-from config import INDEX_NAME
+from config import INDEX_NAME, VALID_ENVIRONMENTS
 import logging
 
 # Configurazione logging
@@ -59,31 +59,50 @@ def process_and_index_thread(thread, embeddings, index):
     st.session_state.processed_threads.add(thread_id)
     return len(chunks)
 
+def validate_pinecone_environment(environment: str) -> bool:
+    """Valida il formato dell'environment di Pinecone."""
+    return environment in VALID_ENVIRONMENTS
+
 def main():
     initialize_session_state()
     st.title("🔮 L'Oracolo")
     st.write("Un sistema RAG per analizzare le discussioni del forum")
     
     try:
-        # Debug info
-        st.write("Debug connection info:")
-        st.write(f"Environment: {st.secrets['PINECONE_ENVIRONMENT']}")
-        st.write(f"API Key length: {len(st.secrets['PINECONE_API_KEY'])}")
-        st.write(f"Index name: {INDEX_NAME}")
-        
+        # Validazione environment
+        environment = st.secrets['PINECONE_ENVIRONMENT']
+        if not validate_pinecone_environment(environment):
+            st.error(f"Environment Pinecone non valido: {environment}. Formato corretto: 'us-east1-aws'")
+            return
+            
         # Inizializzazione Pinecone
-        st.write("Tentativo di connessione a Pinecone:")
-        pinecone.init(
-            api_key=st.secrets["PINECONE_API_KEY"],
-            environment=st.secrets["PINECONE_ENVIRONMENT"]
-        )
-        
+        try:
+            pinecone.init(
+                api_key=st.secrets["PINECONE_API_KEY"],
+                environment=environment
+            )
+        except pinecone.core.client.exceptions.PineconeException as e:
+            if "invalid environment" in str(e).lower():
+                st.error("Environment Pinecone non valido. Controlla il formato in Streamlit Secrets.")
+            else:
+                st.error(f"Errore di connessione a Pinecone: {str(e)}")
+            return
+            
         # Lista degli indici disponibili
-        indexes = pinecone.list_indexes()
-        st.write("Available indexes:", indexes)
-        
+        try:
+            indexes = pinecone.list_indexes()
+            if not indexes:
+                st.error("Nessun indice trovato. Creane uno dalla console Pinecone.")
+                return
+                
+            if INDEX_NAME not in indexes:
+                st.error(f"Indice {INDEX_NAME} non trovato. Indici disponibili: {', '.join(indexes)}")
+                return
+        except Exception as e:
+            st.error(f"Errore nel recupero degli indici: {str(e)}")
+            return
+            
         # Ottieni l'indice esistente
-        st.write(f"Tentativo di connessione all'indice {INDEX_NAME}")
         index = pinecone.Index(INDEX_NAME)
         embeddings = get_embeddings()
         st.success("Connessione a Pinecone stabilita con successo!")
@@ -147,14 +166,7 @@ def main():
     
     except Exception as e:
         st.error(f"Errore di inizializzazione: {str(e)}")
-        # Debug aggiuntivo per l'errore
-        st.write("Error details:")
-        st.write(f"Error type: {type(e)}")
-        st.write(f"Error message: {str(e)}")
-        if hasattr(e, 'response'):
-            st.write(f"Response status: {e.response.status_code}")
-            st.write(f"Response headers: {e.response.headers}")
-            st.write(f"Response body: {e.response.text}")
+        logger.error("Errore di inizializzazione", exc_info=True)
 
 if __name__ == "__main__":
     main()
