@@ -30,6 +30,13 @@ def get_thread_id(thread):
     thread_key = f"{thread['url']}_{thread['scrape_time']}"
     return hashlib.md5(thread_key.encode()).hexdigest()
 
+def reinit_pinecone():
+    """Reinizializza la connessione a Pinecone."""
+    pinecone.init(
+        api_key=st.secrets["PINECONE_API_KEY"],
+        environment=st.secrets["PINECONE_ENVIRONMENT"]
+    )
+
 def process_and_index_thread(thread, embeddings, index):
     """Processa e indicizza un thread."""
     thread_id = get_thread_id(thread)
@@ -54,6 +61,8 @@ def process_and_index_thread(thread, embeddings, index):
                 "url": thread['url'],
                 "timestamp": thread['scrape_time']
             }
+            # Reinizializza Pinecone prima di ogni operazione di update
+            reinit_pinecone()
             update_document_in_index(index, chunk_id, embedding, metadata)
     
     st.session_state.processed_threads.add(thread_id)
@@ -73,37 +82,22 @@ def main():
         
         # Inizializzazione Pinecone
         st.write("Tentativo di connessione a Pinecone:")
-
-        try:
-            # Inizializzazione con la vecchia sintassi di Pinecone v2
-            pinecone.init(
-                api_key=st.secrets["PINECONE_API_KEY"],
-                environment=st.secrets["PINECONE_ENVIRONMENT"]
-            )
-            
-            # Ottieni l'indice
-            index = pinecone.Index(INDEX_NAME)
-            
-            # Test della connessione
-            stats = index.describe_index_stats()
-            st.write("Statistiche indice:", stats)
-            
-            st.success("Connessione a Pinecone stabilita con successo!")
-        except Exception as e:
-            st.error(f"Errore durante la connessione a Pinecone: {str(e)}")
-            st.write("Debug info:")
-            st.write(f"- API Key (lunghezza): {len(st.secrets['PINECONE_API_KEY'])}")
-            st.write(f"- Index name: {INDEX_NAME}")
-            raise
+        
+        # Forza reinizializzazione
+        reinit_pinecone()
         
         # Lista degli indici disponibili
         indexes = pinecone.list_indexes()
         st.write("Available indexes:", indexes)
         
-        # Ottieni l'indice esistente
-        st.write(f"Tentativo di connessione all'indice {INDEX_NAME}")
+        # Ottieni l'indice
         index = pinecone.Index(INDEX_NAME)
         embeddings = get_embeddings()
+        
+        # Verifica la connessione
+        stats = index.describe_index_stats()
+        st.write("Index stats:", stats)
+        
         st.success("Connessione a Pinecone stabilita con successo!")
         
         # Sidebar per il caricamento dati
@@ -144,6 +138,8 @@ def main():
                 st.markdown(prompt)
             
             try:
+                # Reinizializza Pinecone prima della query
+                reinit_pinecone()
                 retriever = PineconeRetriever(index, embeddings)
                 chain = setup_rag_chain(retriever)
                 
