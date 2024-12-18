@@ -1,5 +1,5 @@
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain.embeddings import OpenAIEmbeddings
+from langchain_openai import OpenAIEmbeddings
 from config import CHUNK_SIZE, CHUNK_OVERLAP
 
 def create_chunks(texts: list[str]) -> list:
@@ -12,4 +12,4 @@ def create_chunks(texts: list[str]) -> list:
 
 def get_embeddings():
     """Inizializza il modello di embeddings."""
-    return OpenAIEmbeddings()
+    return OpenAIEmbeddings(model="text-embedding-ada-002")
