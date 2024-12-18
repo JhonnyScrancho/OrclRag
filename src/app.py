@@ -76,12 +76,18 @@ def main():
         st.write("Tentativo di connessione a Pinecone:")
 
         try:
-            # Creiamo un'istanza di Pinecone
             pc = Pinecone(
                 api_key=st.secrets["PINECONE_API_KEY"]
             )
             
-            # Ottieni l'indice (nota la sintassi modificata)
+            # Prima verifichiamo se l'indice esiste
+            available_indexes = pc.list_indexes().names()
+            st.write(f"Indici disponibili: {available_indexes}")
+            
+            if INDEX_NAME not in available_indexes:
+                st.error(f"L'indice {INDEX_NAME} non esiste!")
+                raise ValueError(f"Index {INDEX_NAME} not found")
+                
             index = pc.Index(name=INDEX_NAME)
             
             # Test della connessione
