@@ -32,50 +32,31 @@ def get_thread_id(thread):
     return hashlib.md5(thread_key.encode()).hexdigest()
 
 def reinit_pinecone():
-    """Reinizializza la connessione a Pinecone con test DNS."""
-    import socket
-    import urllib3
-    import ssl
-    import dns.resolver
-    
-    PINECONE_ENDPOINT = "forum-index-p5eyqni.svc.aped-4627-b74a.pinecone.io"
-    
-    # Debug DNS
-    st.write("Testing DNS resolution...")
+    """Reinizializza la connessione a Pinecone."""
     try:
-        ip = socket.gethostbyname(PINECONE_ENDPOINT)
-        st.write(f"DNS Resolution successful: {ip}")
-    except socket.gaierror as e:
-        st.write(f"DNS Resolution failed: {e}")
-        st.write("Trying alternative DNS servers...")
-        
-        # Prova con i DNS di Google
-        resolver = dns.resolver.Resolver()
-        resolver.nameservers = ['8.8.8.8', '8.8.4.4']
-        try:
-            answers = resolver.resolve(PINECONE_ENDPOINT, 'A')
-            for rdata in answers:
-                st.write(f"Resolution successful with Google DNS: {rdata}")
-                ip = str(rdata)
-                break
-        except Exception as e:
-            st.write(f"Failed with Google DNS: {e}")
-    
-    # Se abbiamo trovato un IP, usiamolo direttamente
-    if 'ip' in locals():
-        st.write(f"Using resolved IP: {ip}")
-        openapi_config = OpenApiConfiguration.get_default_copy()
-        openapi_config.host = f"https://{PINECONE_ENDPOINT}"
-        
         pinecone.init(
             api_key=st.secrets["PINECONE_API_KEY"],
-            environment=st.secrets["PINECONE_ENVIRONMENT"],
-            openapi_config=openapi_config
+            environment=st.secrets["PINECONE_ENVIRONMENT"]
         )
-        st.write("Pinecone initialization successful")
-    else:
-        st.error("Could not resolve Pinecone DNS")
-        raise Exception("DNS resolution failed")
+        
+        # Crea connessione all'indice specificando il nome host completo
+        index = pinecone.Index(
+            INDEX_NAME,
+            host=f"https://forum-index-p5eyqni.svc.aped-4627-b74a.pinecone.io"
+        )
+        
+        # Test della connessione
+        stats = index.describe_index_stats()
+        st.write("Connection test successful:", stats)
+        
+        return index
+        
+    except Exception as e:
+        st.error(f"Errore di connessione: {str(e)}")
+        st.write("Debug info:")
+        st.write(f"Index name: {INDEX_NAME}")
+        st.write(f"Host: forum-index-p5eyqni.svc.aped-4627-b74a.pinecone.io")
+        raise
 
 def process_and_index_thread(thread, embeddings, index):
     """Processa e indicizza un thread."""
