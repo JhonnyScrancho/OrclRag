@@ -73,7 +73,6 @@ def main():
         st.write(f"Index name: {INDEX_NAME}")
         
         # Inizializzazione Pinecone
-        # Inizializzazione Pinecone
         st.write("Tentativo di connessione a Pinecone:")
 
         try:
@@ -82,8 +81,8 @@ def main():
                 api_key=st.secrets["PINECONE_API_KEY"]
             )
             
-            # Ottieni l'indice
-            index = pc.Index(INDEX_NAME)
+            # Ottieni l'indice (nota la sintassi modificata)
+            index = pc.Index(name=INDEX_NAME)
             
             # Test della connessione
             stats = index.describe_index_stats()
@@ -92,9 +91,11 @@ def main():
             st.success("Connessione a Pinecone stabilita con successo!")
         except Exception as e:
             st.error(f"Errore durante la connessione a Pinecone: {str(e)}")
+            # Aggiungiamo più dettagli per il debug
             st.write("Debug info:")
             st.write(f"- API Key (lunghezza): {len(st.secrets['PINECONE_API_KEY'])}")
             st.write(f"- Index name: {INDEX_NAME}")
+            st.write(f"- Available indexes: {pc.list_indexes().names() if pc else 'None'}")
             raise
         
         # Lista degli indici disponibili
