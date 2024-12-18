@@ -34,16 +34,20 @@ def get_thread_id(thread):
 def reinit_pinecone():
     """Reinizializza la connessione a Pinecone."""
     try:
+        # Crea la configurazione
+        openapi_config = OpenApiConfiguration.get_default_copy()
+        openapi_config.server_variables = {
+            "environment": st.secrets["PINECONE_ENVIRONMENT"]
+        }
+        
+        # Inizializza pinecone
         pinecone.init(
             api_key=st.secrets["PINECONE_API_KEY"],
             environment=st.secrets["PINECONE_ENVIRONMENT"]
         )
         
-        # Crea connessione all'indice specificando il nome host completo
-        index = pinecone.Index(
-            INDEX_NAME,
-            host=f"https://forum-index-p5eyqni.svc.aped-4627-b74a.pinecone.io"
-        )
+        # Ottieni l'indice
+        index = pinecone.Index(INDEX_NAME)
         
         # Test della connessione
         stats = index.describe_index_stats()
@@ -55,7 +59,8 @@ def reinit_pinecone():
         st.error(f"Errore di connessione: {str(e)}")
         st.write("Debug info:")
         st.write(f"Index name: {INDEX_NAME}")
-        st.write(f"Host: forum-index-p5eyqni.svc.aped-4627-b74a.pinecone.io")
+        st.write(f"Environment: {st.secrets['PINECONE_ENVIRONMENT']}")
+        st.write(f"API Key length: {len(st.secrets['PINECONE_API_KEY'])}")
         raise
 
 def process_and_index_thread(thread, embeddings, index):
