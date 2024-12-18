@@ -9,7 +9,7 @@ from ui.utils import display_thread_preview
 import pinecone
 import hashlib
 from datetime import datetime
-from src.config import INDEX_NAME
+from config import INDEX_NAME
 import logging
 
 # Configurazione logging
