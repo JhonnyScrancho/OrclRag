@@ -6,7 +6,7 @@ from embeddings.indexer import ensure_index_exists, update_document_in_index
 from rag.retriever import PineconeRetriever
 from rag.chain import setup_rag_chain
 from ui.utils import display_thread_preview
-from pinecone import Pinecone
+from pinecone import Pinecone, PodSpec
 import hashlib
 from datetime import datetime
 
@@ -59,18 +59,19 @@ def main():
     st.write("Un sistema RAG per analizzare le discussioni del forum")
     
     try:
-        # Inizializza Pinecone con la nuova sintassi
-        pc = Pinecone(
+        # Initialize Pinecone with compatible syntax
+        import pinecone
+        pinecone.init(
             api_key=st.secrets["PINECONE_API_KEY"],
             environment=st.secrets["PINECONE_ENVIRONMENT"]
         )
-        index = ensure_index_exists(pc)
+        index = ensure_index_exists(pinecone)
         embeddings = get_embeddings()
     except Exception as e:
         st.error(f"Errore di inizializzazione: {str(e)}")
         return
     
-    # Resto del codice invariato...
+    # Rest of the code remains the same...
     with st.sidebar:
         st.header("Caricamento Dati")
         uploaded_file = st.file_uploader("Carica JSON del forum", type=['json'])
