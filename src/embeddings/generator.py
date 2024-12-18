@@ -12,4 +12,4 @@ def create_chunks(texts: list[str]) -> list:
 
 def get_embeddings():
     """Inizializza il modello di embeddings."""
-    return OpenAIEmbeddings(model="text-embedding-ada-002")
+    return OpenAIEmbeddings()
