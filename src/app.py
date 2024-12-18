@@ -75,26 +75,23 @@ def main():
         st.write("Tentativo di connessione a Pinecone:")
 
         try:
-            # Configurazione Pinecone con tutti i dettagli
+            # Prima tentiamo di connetterci direttamente usando l'URL completo
+            connection_string = f"https://forum-index-p5eyqni.svc.aped-4627-b74a.pinecone.io"
+            
             pinecone.init(
                 api_key=st.secrets["PINECONE_API_KEY"],
                 environment=st.secrets["PINECONE_ENVIRONMENT"],
-                additional_headers={
-                    "service-hostname": "forum-index-p5eyqni.svc.aped-4627-b74a.pinecone.io"
-                }
+                connection_string=connection_string
             )
             
             # Ottieni l'indice
             index = pinecone.Index(INDEX_NAME)
             
-            # Test della connessione
-            stats = index.describe_index_stats()
-            st.write("Statistiche indice:", stats)
-            
             st.success("Connessione a Pinecone stabilita con successo!")
         except Exception as e:
             st.error(f"Errore durante la connessione a Pinecone: {str(e)}")
             st.write("Debug info:")
+            st.write(f"- Connection string: {connection_string}")
             st.write(f"- API Key (lunghezza): {len(st.secrets['PINECONE_API_KEY'])}")
             st.write(f"- Environment: {st.secrets['PINECONE_ENVIRONMENT']}")
             st.write(f"- Index name: {INDEX_NAME}")
