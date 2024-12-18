@@ -25,10 +25,9 @@ def ensure_index_exists(pinecone_client):
                 name=INDEX_NAME,
                 dimension=1536,  # dimensione per OpenAI ada-002
                 metric='cosine',
-                spec=pinecone.ServerlessSpec(
-                    cloud='aws',
-                    region='us-east-1'
-                )
+                service_type='serverless',
+                cloud='aws',
+                region='us-east-1'
             )
             # Wait for index to be ready
             time.sleep(1)
@@ -41,10 +40,9 @@ def ensure_index_exists(pinecone_client):
                 name=INDEX_NAME,
                 dimension=1536,
                 metric='cosine',
-                spec=pinecone.ServerlessSpec(
-                    cloud='aws',
-                    region='us-east-1'
-                )
+                service_type='serverless',
+                cloud='aws',
+                region='us-east-1'
             )
             # Wait for index to be ready
             time.sleep(1)
