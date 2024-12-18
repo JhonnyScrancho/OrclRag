@@ -7,6 +7,7 @@ from rag.retriever import PineconeRetriever
 from rag.chain import setup_rag_chain
 from ui.utils import display_thread_preview
 import pinecone
+from pinecone import Pinecone
 import hashlib
 from datetime import datetime
 from config import INDEX_NAME
@@ -72,28 +73,27 @@ def main():
         st.write(f"Index name: {INDEX_NAME}")
         
         # Inizializzazione Pinecone
+        # Inizializzazione Pinecone
         st.write("Tentativo di connessione a Pinecone:")
 
         try:
-            # Prima tentiamo di connetterci direttamente usando l'URL completo
-            connection_string = f"https://forum-index-p5eyqni.svc.aped-4627-b74a.pinecone.io"
-            
-            pinecone.init(
-                api_key=st.secrets["PINECONE_API_KEY"],
-                environment=st.secrets["PINECONE_ENVIRONMENT"],
-                connection_string=connection_string
+            # Creiamo un'istanza di Pinecone
+            pc = Pinecone(
+                api_key=st.secrets["PINECONE_API_KEY"]
             )
             
             # Ottieni l'indice
-            index = pinecone.Index(INDEX_NAME)
+            index = pc.Index(INDEX_NAME)
+            
+            # Test della connessione
+            stats = index.describe_index_stats()
+            st.write("Statistiche indice:", stats)
             
             st.success("Connessione a Pinecone stabilita con successo!")
         except Exception as e:
             st.error(f"Errore durante la connessione a Pinecone: {str(e)}")
             st.write("Debug info:")
-            st.write(f"- Connection string: {connection_string}")
             st.write(f"- API Key (lunghezza): {len(st.secrets['PINECONE_API_KEY'])}")
-            st.write(f"- Environment: {st.secrets['PINECONE_ENVIRONMENT']}")
             st.write(f"- Index name: {INDEX_NAME}")
             raise
         
