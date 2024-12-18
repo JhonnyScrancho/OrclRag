@@ -9,6 +9,7 @@ from ui.utils import display_thread_preview
 import pinecone
 import hashlib
 from datetime import datetime
+from src.config import INDEX_NAME
 import logging
 
 # Configurazione logging
@@ -72,7 +73,7 @@ def main():
         )
         
         # Ottieni l'indice esistente
-        index = pinecone.Index("rag")
+        index = pinecone.Index(INDEX_NAME)
         embeddings = get_embeddings()
         st.success("Connessione a Pinecone stabilita con successo!")
         
