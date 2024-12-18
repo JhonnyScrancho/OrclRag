@@ -7,6 +7,7 @@ from rag.retriever import PineconeRetriever
 from rag.chain import setup_rag_chain
 from ui.utils import display_thread_preview
 import pinecone
+from pinecone.core.client.configuration import Configuration as OpenApiConfiguration
 import hashlib
 from datetime import datetime
 from config import INDEX_NAME
@@ -31,10 +32,14 @@ def get_thread_id(thread):
     return hashlib.md5(thread_key.encode()).hexdigest()
 
 def reinit_pinecone():
-    """Reinizializza la connessione a Pinecone."""
+    """Reinizializza la connessione a Pinecone con configurazione proxy."""
+    openapi_config = OpenApiConfiguration.get_default_copy()
+    openapi_config.proxy = "http://proxy.server:3128"  # Prova con questa configurazione di proxy
+    
     pinecone.init(
         api_key=st.secrets["PINECONE_API_KEY"],
-        environment=st.secrets["PINECONE_ENVIRONMENT"]
+        environment=st.secrets["PINECONE_ENVIRONMENT"],
+        openapi_config=openapi_config
     )
 
 def process_and_index_thread(thread, embeddings, index):
