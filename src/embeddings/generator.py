@@ -1,22 +1,21 @@
 import streamlit as st
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.embeddings.base import Embeddings
-from openai import OpenAI
 from config import CHUNK_SIZE, CHUNK_OVERLAP
 from typing import List
+import openai
 
-class CustomOpenAIEmbeddings(Embeddings):
-    """Classe personalizzata per gli embeddings che usa direttamente il client OpenAI."""
+class DirectOpenAIEmbeddings(Embeddings):
+    """Classe minimalista per gli embeddings che usa l'API OpenAI di base."""
     
     def __init__(self):
-        self.client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
+        openai.api_key = st.secrets["OPENAI_API_KEY"]
     
     def embed_documents(self, texts: List[str]) -> List[List[float]]:
         """Genera embeddings per una lista di testi."""
         embeddings = []
-        # Process in batches to avoid rate limits
         for text in texts:
-            response = self.client.embeddings.create(
+            response = openai.embeddings.create(
                 model="text-embedding-ada-002",
                 input=text
             )
@@ -25,7 +24,7 @@ class CustomOpenAIEmbeddings(Embeddings):
     
     def embed_query(self, text: str) -> List[float]:
         """Genera embedding per un singolo testo di query."""
-        response = self.client.embeddings.create(
+        response = openai.embeddings.create(
             model="text-embedding-ada-002",
             input=text
         )
@@ -41,4 +40,4 @@ def create_chunks(texts: list[str]) -> list:
 
 def get_embeddings():
     """Inizializza il modello di embeddings."""
-    return CustomOpenAIEmbeddings()
+    return DirectOpenAIEmbeddings()
