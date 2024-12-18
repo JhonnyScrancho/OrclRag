@@ -9,7 +9,7 @@ from ui.utils import display_thread_preview
 import pinecone
 import hashlib
 from datetime import datetime
-from config import INDEX_NAME, VALID_ENVIRONMENTS
+from config import INDEX_NAME, VALID_ENVIRONMENTS, validate_pinecone_environment
 import logging
 
 # Configurazione logging
@@ -59,10 +59,6 @@ def process_and_index_thread(thread, embeddings, index):
     st.session_state.processed_threads.add(thread_id)
     return len(chunks)
 
-def validate_pinecone_environment(environment: str) -> bool:
-    """Valida il formato dell'environment di Pinecone."""
-    return environment in VALID_ENVIRONMENTS
-
 def main():
     initialize_session_state()
     st.title("🔮 L'Oracolo")
@@ -72,7 +68,11 @@ def main():
         # Validazione environment
         environment = st.secrets['PINECONE_ENVIRONMENT']
         if not validate_pinecone_environment(environment):
-            st.error(f"Environment Pinecone non valido: {environment}. Formato corretto: 'us-east1-aws'")
+            st.error(f"""
+            Environment Pinecone non valido: {environment}
+            L'environment corretto per il tuo indice è: us-east-1
+            Per favore, aggiorna il valore di PINECONE_ENVIRONMENT nei secrets di Streamlit.
+            """)
             return
             
         # Inizializzazione Pinecone
@@ -81,20 +81,13 @@ def main():
                 api_key=st.secrets["PINECONE_API_KEY"],
                 environment=environment
             )
-        except pinecone.core.client.exceptions.PineconeException as e:
-            if "invalid environment" in str(e).lower():
-                st.error("Environment Pinecone non valido. Controlla il formato in Streamlit Secrets.")
-            else:
-                st.error(f"Errore di connessione a Pinecone: {str(e)}")
+        except Exception as e:
+            st.error(f"Errore di connessione a Pinecone: {str(e)}")
             return
             
         # Lista degli indici disponibili
         try:
             indexes = pinecone.list_indexes()
-            if not indexes:
-                st.error("Nessun indice trovato. Creane uno dalla console Pinecone.")
-                return
-                
             if INDEX_NAME not in indexes:
                 st.error(f"Indice {INDEX_NAME} non trovato. Indici disponibili: {', '.join(indexes)}")
                 return

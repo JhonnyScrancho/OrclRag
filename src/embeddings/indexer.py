@@ -1,21 +1,20 @@
 from typing import List
 import streamlit as st
-from config import INDEX_NAME, VALID_ENVIRONMENTS
+from config import INDEX_NAME, VALID_ENVIRONMENTS, validate_pinecone_environment
 import logging
 import pinecone
 
 logger = logging.getLogger(__name__)
 
-def validate_environment(environment: str) -> bool:
-    """Valida il formato dell'environment di Pinecone."""
-    return environment in VALID_ENVIRONMENTS
-
 def ensure_index_exists(pinecone_client):
     """Connette all'indice Pinecone esistente."""
     try:
         environment = st.secrets['PINECONE_ENVIRONMENT']
-        if not validate_environment(environment):
-            error_msg = f"Environment non valido: {environment}. Formati validi: {', '.join(VALID_ENVIRONMENTS)}"
+        if not validate_pinecone_environment(environment):
+            error_msg = f"""
+            Environment non valido: {environment}
+            L'environment corretto è: us-east-1
+            """
             logger.error(error_msg)
             raise ValueError(error_msg)
         
@@ -40,7 +39,7 @@ def ensure_index_exists(pinecone_client):
     except Exception as e:
         error_msg = f"""
         Errore durante la connessione a Pinecone: {str(e)}
-        - Environment: {st.secrets['PINECONE_ENVIRONMENT']}
+        - Environment configurato: {st.secrets['PINECONE_ENVIRONMENT']}
         - Indice richiesto: {INDEX_NAME}
         """
         logger.error(error_msg)
