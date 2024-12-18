@@ -1,6 +1,7 @@
 from typing import List
 import streamlit as st
 from config import INDEX_NAME
+from pinecone import Pinecone, ServerlessSpec
 
 def ensure_index_exists(pc):
     """Assicura che l'indice Pinecone esista."""
@@ -12,7 +13,11 @@ def ensure_index_exists(pc):
         pc.create_index(
             name=INDEX_NAME,
             dimension=1536,  # dimensione per OpenAI embeddings
-            metric="cosine"
+            metric="cosine",
+            spec=ServerlessSpec(
+                cloud="aws",
+                region="us-west-2"
+            )
         )
     
     # Get the index
