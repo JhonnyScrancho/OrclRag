@@ -3,12 +3,11 @@ import streamlit as st
 from config import INDEX_NAME
 import logging
 import pinecone
-import time
 
 logger = logging.getLogger(__name__)
 
 def ensure_index_exists(pinecone_client):
-    """Connette all'indice Pinecone esistente o lo crea se non esiste."""
+    """Connette all'indice Pinecone esistente."""
     try:
         # Debug: mostra le impostazioni di connessione
         st.write("Tentativo di connessione a Pinecone:")
@@ -18,30 +17,11 @@ def ensure_index_exists(pinecone_client):
         # Get list of existing indexes
         existing_indexes = pinecone_client.list_indexes()
         
-        if not existing_indexes:
-            st.warning("Nessun indice trovato. Creo un nuovo indice...")
-            # Create a new index with basic parameters
-            pinecone_client.create_index(
-                name=INDEX_NAME,
-                dimension=1536,  # dimensione per OpenAI ada-002
-                metric='cosine'
-            )
-            # Wait for index to be ready
-            time.sleep(1)
-            while not pinecone_client.describe_index(INDEX_NAME).status['ready']:
-                time.sleep(1)
-            
-        elif INDEX_NAME not in existing_indexes:
-            st.warning(f"L'indice {INDEX_NAME} non esiste. Creo un nuovo indice...")
-            pinecone_client.create_index(
-                name=INDEX_NAME,
-                dimension=1536,
-                metric='cosine'
-            )
-            # Wait for index to be ready
-            time.sleep(1)
-            while not pinecone_client.describe_index(INDEX_NAME).status['ready']:
-                time.sleep(1)
+        if INDEX_NAME not in existing_indexes:
+            available_indexes = ', '.join(existing_indexes) if existing_indexes else 'nessuno'
+            error_msg = f"L'indice {INDEX_NAME} non esiste. Per favore, crealo dalla console di Pinecone. Indici disponibili: {available_indexes}"
+            st.error(error_msg)
+            raise ValueError(error_msg)
         
         # Get the index
         index = pinecone_client.Index(INDEX_NAME)
