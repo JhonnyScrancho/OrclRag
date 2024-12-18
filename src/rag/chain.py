@@ -1,6 +1,6 @@
 from langchain.chat_models import ChatOpenAI
 from langchain.chains import RetrievalQA
-from src.config import LLM_MODEL
+from config import LLM_MODEL
 
 def setup_rag_chain(retriever):
     """Configura la catena RAG."""

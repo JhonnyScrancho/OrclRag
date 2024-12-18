@@ -1,5 +1,5 @@
 import streamlit as st
-from src.data.loader import load_json
+from data.loader import load_json
 
 def render_sidebar():
     """Renderizza la sidebar con le funzionalità di upload."""

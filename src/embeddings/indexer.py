@@ -1,7 +1,7 @@
 import pinecone
 from typing import List
 import streamlit as st
-from src.config import INDEX_NAME
+from config import INDEX_NAME
 
 def ensure_index_exists():
     """Assicura che l'indice Pinecone esista."""
