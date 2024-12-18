@@ -1,0 +1,26 @@
+[
+  {
+    "url": "https://www.example.com/forum/post/1",
+    "title": "Esempio di Thread",
+    "scrape_time": "2024-11-29T15:05:21.082982",
+    "posts": [
+      {
+        "post_id": "post-1",
+        "author": "TestUser",
+        "content": "Questo è un post di esempio per testare il sistema.",
+        "post_time": "2024-09-20T11:17:57+0100",
+        "keywords": ["test", "esempio", "sistema"],
+        "sentiment": 0.5,
+        "metadata": {
+          "processing_time": "2024-11-29T15:05:20.879798",
+          "content_length": 100
+        }
+      }
+    ],
+    "metadata": {
+      "total_posts": 1,
+      "last_page_scraped": 1,
+      "scraper_version": "1.0"
+    }
+  }
+]
