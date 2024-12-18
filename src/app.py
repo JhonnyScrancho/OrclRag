@@ -36,6 +36,7 @@ def reinit_pinecone():
     import socket
     import urllib3
     import ssl
+    import dns.resolver  # Aggiungiamo questo import
     
     # Debug DNS
     st.write("Testing DNS resolution...")
@@ -47,45 +48,39 @@ def reinit_pinecone():
         st.write("Trying alternative DNS servers...")
         
         # Prova con i DNS di Google
-        dns_servers = ['8.8.8.8', '8.8.4.4']
-        for dns in dns_servers:
-            try:
-                resolver = dns.resolver.Resolver()
-                resolver.nameservers = [dns]
-                answer = resolver.resolve('controller.us-east-1.pinecone.io', 'A')
-                st.write(f"Resolution with {dns} successful: {answer[0]}")
-                ip = str(answer[0])
+        resolver = dns.resolver.Resolver()
+        resolver.nameservers = ['8.8.8.8', '8.8.4.4']
+        try:
+            answers = resolver.resolve('controller.us-east-1.pinecone.io', 'A')
+            for rdata in answers:
+                st.write(f"Resolution successful with Google DNS: {rdata}")
+                ip = str(rdata)
                 break
-            except Exception as e:
-                st.write(f"Failed with {dns}: {e}")
+        except Exception as e:
+            st.write(f"Failed with Google DNS: {e}")
     
-    # Prova configurazione con pool personalizzato
-    http = urllib3.PoolManager(
-        timeout=urllib3.Timeout(connect=5, read=10),
-        retries=urllib3.Retry(3),
-        ssl_version=ssl.PROTOCOL_TLS
-    )
-    
-    # Aggiungi gli header necessari
-    headers = {
-        'Api-Key': st.secrets["PINECONE_API_KEY"],
-    }
-    
-    openapi_config = OpenApiConfiguration.get_default_copy()
-    openapi_config.http_client = http
-    openapi_config.ssl_ca_cert = None  # Disabilita la verifica del certificato per test
-    openapi_config.assert_hostname = False
-    
-    try:
-        pinecone.init(
-            api_key=st.secrets["PINECONE_API_KEY"],
-            environment=st.secrets["PINECONE_ENVIRONMENT"],
-            openapi_config=openapi_config
-        )
-        st.write("Pinecone initialization successful")
-    except Exception as e:
-        st.write(f"Pinecone initialization failed: {str(e)}")
-        raise
+    # Se abbiamo trovato un IP, usiamolo direttamente
+    if 'ip' in locals():
+        st.write(f"Using resolved IP: {ip}")
+        # Modifica la configurazione per usare l'IP direttamente
+        openapi_config = OpenApiConfiguration.get_default_copy()
+        openapi_config.host = f"https://{ip}"
+        openapi_config.ssl_ca_cert = None
+        openapi_config.assert_hostname = False
+        
+        try:
+            pinecone.init(
+                api_key=st.secrets["PINECONE_API_KEY"],
+                environment=st.secrets["PINECONE_ENVIRONMENT"],
+                openapi_config=openapi_config
+            )
+            st.write("Pinecone initialization successful")
+        except Exception as e:
+            st.write(f"Pinecone initialization failed: {str(e)}")
+            raise
+    else:
+        st.error("Could not resolve Pinecone DNS")
+        raise Exception("DNS resolution failed")
 
 def process_and_index_thread(thread, embeddings, index):
     """Processa e indicizza un thread."""
