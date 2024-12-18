@@ -8,4 +8,4 @@ CHUNK_SIZE = 1000
 CHUNK_OVERLAP = 200
 
 # Pinecone Config
-PINECONE_CLOUD = "us-east-1"
+PINECONE_CLOUD = "aws"
