@@ -1,17 +1,22 @@
-import pinecone
 from typing import List
 import streamlit as st
 from config import INDEX_NAME
 
-def ensure_index_exists():
+def ensure_index_exists(pc):
     """Assicura che l'indice Pinecone esista."""
-    if INDEX_NAME not in pinecone.list_indexes():
-        pinecone.create_index(
+    # Get list of existing indexes
+    indexes = pc.list_indexes()
+    
+    # Create index if it doesn't exist
+    if INDEX_NAME not in [index.name for index in indexes]:
+        pc.create_index(
             name=INDEX_NAME,
             dimension=1536,  # dimensione per OpenAI embeddings
             metric="cosine"
         )
-    return pinecone.Index(INDEX_NAME)
+    
+    # Get the index
+    return pc.Index(INDEX_NAME)
 
 def update_document_in_index(index, doc_id: str, embedding: List[float], metadata: dict):
     """Aggiorna o inserisce un documento nell'indice."""

@@ -6,7 +6,7 @@ from embeddings.indexer import ensure_index_exists, update_document_in_index
 from rag.retriever import PineconeRetriever
 from rag.chain import setup_rag_chain
 from ui.utils import display_thread_preview
-import pinecone
+from pinecone import Pinecone
 import hashlib
 from datetime import datetime
 
@@ -59,18 +59,18 @@ def main():
     st.write("Un sistema RAG per analizzare le discussioni del forum")
     
     try:
-        # Inizializza Pinecone
-        pinecone.init(
+        # Inizializza Pinecone con la nuova sintassi
+        pc = Pinecone(
             api_key=st.secrets["PINECONE_API_KEY"],
             environment=st.secrets["PINECONE_ENVIRONMENT"]
         )
-        index = ensure_index_exists()
+        index = ensure_index_exists(pc)
         embeddings = get_embeddings()
     except Exception as e:
         st.error(f"Errore di inizializzazione: {str(e)}")
         return
     
-    # Sidebar per upload e processing
+    # Resto del codice invariato...
     with st.sidebar:
         st.header("Caricamento Dati")
         uploaded_file = st.file_uploader("Carica JSON del forum", type=['json'])
@@ -86,13 +86,11 @@ def main():
                 st.success(f"Processati {len(data)} thread e creati {total_chunks} chunks!")
                 st.session_state['data'] = data
     
-    # Mostra anteprima dati se disponibili
     if 'data' in st.session_state:
         with st.expander("📊 Anteprima Dati Caricati"):
             for thread in st.session_state['data']:
                 display_thread_preview(thread)
     
-    # Chat interface
     st.header("💬 Chat con l'Oracolo")
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
@@ -108,17 +106,14 @@ def main():
             st.markdown(prompt)
         
         try:
-            # Setup retriever e chain
             retriever = PineconeRetriever(index, embeddings)
             chain = setup_rag_chain(retriever)
             
-            # Genera risposta
             with st.chat_message("assistant"):
                 with st.spinner("Consulto la mia conoscenza..."):
                     response = chain({"query": prompt})
                     st.markdown(response['result'])
                     
-                    # Mostra fonti
                     if st.toggle("Mostra fonti"):
                         st.divider()
                         for doc in response['source_documents']:
