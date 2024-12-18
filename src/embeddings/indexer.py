@@ -8,34 +8,40 @@ logger = logging.getLogger(__name__)
 def ensure_index_exists(pinecone):
     """Connette all'indice Pinecone esistente."""
     try:
+        # Debug: mostra le impostazioni di connessione
+        st.write("Tentativo di connessione con:")
+        st.write(f"- Indice richiesto: {INDEX_NAME}")
+        st.write(f"- Environment: {st.secrets['PINECONE_ENVIRONMENT']}")
+        
         # Get list of existing indexes
         existing_indexes = pinecone.list_indexes()
         
-        # Debug: mostra gli indici disponibili nell'interfaccia
-        st.write("Debug - Indici disponibili:", existing_indexes)
+        # Debug: mostra gli indici disponibili
+        st.write("Indici disponibili:", existing_indexes)
         logger.info(f"Debug - Indici disponibili: {existing_indexes}")
-        logger.info(f"Debug - Tentativo di connessione all'indice: {INDEX_NAME}")
         
+        if not existing_indexes:
+            st.warning("Nessun indice trovato nel tuo account Pinecone.")
+            raise ValueError("Nessun indice disponibile")
+            
         if INDEX_NAME not in existing_indexes:
-            st.error(f"""
-            L'indice {INDEX_NAME} non esiste tra gli indici disponibili: {existing_indexes}.
-            Per favore verifica il nome corretto dell'indice nella console Pinecone.
-            """)
-            raise ValueError(f"L'indice {INDEX_NAME} non esiste.")
+            available_indexes = ', '.join(existing_indexes) if existing_indexes else 'nessuno'
+            st.error(f"L'indice {INDEX_NAME} non esiste. Indici disponibili: {available_indexes}")
+            raise ValueError(f"L'indice {INDEX_NAME} non esiste")
         
         # Get the index
         logger.info(f"Connecting to existing index: {INDEX_NAME}")
         return pinecone.Index(INDEX_NAME)
         
     except Exception as e:
-        logger.error(f"Error in ensure_index_exists: {str(e)}", exc_info=True)
-        st.error(f"""
+        error_msg = f"""
         Errore durante la connessione a Pinecone: {str(e)}
-        - API Key: {'*' * len(st.secrets['PINECONE_API_KEY'])} (lunghezza: {len(st.secrets['PINECONE_API_KEY'])})
+        - API Key length: {len(st.secrets['PINECONE_API_KEY'])}
         - Environment: {st.secrets['PINECONE_ENVIRONMENT']}
         - Indice richiesto: {INDEX_NAME}
-        - Indici disponibili: {existing_indexes}
-        """)
+        """
+        logger.error(error_msg)
+        st.error(error_msg)
         raise
 
 def update_document_in_index(index, doc_id: str, embedding: List[float], metadata: dict):
