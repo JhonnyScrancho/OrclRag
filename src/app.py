@@ -10,7 +10,6 @@ import pinecone  # Changed import statement
 import hashlib
 from datetime import datetime
 
-os.environ['STREAMLIT_WATCH_IGNORE_PATTERNS'] = '*.pyc,__pycache__,*.pyo,*.pyd,*.so,*.dylib'
 
 st.set_page_config(page_title="🔮 L'Oracolo", layout="wide")
 

@@ -1,5 +1,5 @@
 from langchain_openai import ChatOpenAI
-from langchain.chains import RetrievalQA
+from langchain_community.chains import RetrievalQA
 from config import LLM_MODEL
 
 def setup_rag_chain(retriever):

@@ -1,5 +1,5 @@
 from typing import List
-from langchain.docstore.document import Document
+from langchain_core.documents import Document
 
 class PineconeRetriever:
     def __init__(self, index, embeddings, top_k=3):

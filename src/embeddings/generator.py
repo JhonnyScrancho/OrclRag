@@ -1,5 +1,5 @@
 import streamlit as st
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_community.text_splitter import RecursiveCharacterTextSplitter
 from langchain_openai import OpenAIEmbeddings
 from config import CHUNK_SIZE, CHUNK_OVERLAP
 
