@@ -32,9 +32,13 @@ def get_thread_id(thread):
     return hashlib.md5(thread_key.encode()).hexdigest()
 
 def reinit_pinecone():
-    """Reinizializza la connessione a Pinecone con configurazione proxy."""
+    """Reinizializza la connessione a Pinecone con configurazioni aggiuntive."""
     openapi_config = OpenApiConfiguration.get_default_copy()
-    openapi_config.proxy = "https://cloudflare-dns.com"
+    # Aumenta il timeout
+    openapi_config.connect_timeout = 30
+    openapi_config.read_timeout = 30
+    # Disabilita la verifica SSL per test
+    openapi_config.verify_ssl = False
     
     pinecone.init(
         api_key=st.secrets["PINECONE_API_KEY"],
