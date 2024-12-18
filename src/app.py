@@ -81,8 +81,8 @@ def main():
                 api_key=st.secrets["PINECONE_API_KEY"]
             )
             
-            # Ottieni l'indice (Nota: utilizziamo la notazione a parentesi quadre invece del metodo Index())
-            index = pc['forum-index']
+            # Ottieni l'indice usando la proprietà index
+            index = pc.index(INDEX_NAME)
             
             # Test della connessione
             stats = index.describe_index_stats()
