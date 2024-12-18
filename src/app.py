@@ -75,7 +75,8 @@ def main():
         st.write("Tentativo di connessione a Pinecone:")
         pinecone.init(
             api_key=st.secrets["PINECONE_API_KEY"],
-            environment=st.secrets["PINECONE_ENVIRONMENT"]
+            environment="us-east-1",
+            host="forum-index-p5eyqni.svc.aped-4627-b74a.pinecone.io"  # Aggiungi l'host specifico
         )
         
         # Lista degli indici disponibili
