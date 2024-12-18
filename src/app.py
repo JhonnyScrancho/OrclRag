@@ -65,14 +65,25 @@ def main():
     st.write("Un sistema RAG per analizzare le discussioni del forum")
     
     try:
+        # Debug info
+        st.write("Debug connection info:")
+        st.write(f"Environment: {st.secrets['PINECONE_ENVIRONMENT']}")
+        st.write(f"API Key length: {len(st.secrets['PINECONE_API_KEY'])}")
+        st.write(f"Index name: {INDEX_NAME}")
+        
         # Inizializzazione Pinecone
-        st.write("Connessione a Pinecone:")
+        st.write("Tentativo di connessione a Pinecone:")
         pinecone.init(
             api_key=st.secrets["PINECONE_API_KEY"],
             environment=st.secrets["PINECONE_ENVIRONMENT"]
         )
         
+        # Lista degli indici disponibili
+        indexes = pinecone.list_indexes()
+        st.write("Available indexes:", indexes)
+        
         # Ottieni l'indice esistente
+        st.write(f"Tentativo di connessione all'indice {INDEX_NAME}")
         index = pinecone.Index(INDEX_NAME)
         embeddings = get_embeddings()
         st.success("Connessione a Pinecone stabilita con successo!")
@@ -136,6 +147,14 @@ def main():
     
     except Exception as e:
         st.error(f"Errore di inizializzazione: {str(e)}")
+        # Debug aggiuntivo per l'errore
+        st.write("Error details:")
+        st.write(f"Error type: {type(e)}")
+        st.write(f"Error message: {str(e)}")
+        if hasattr(e, 'response'):
+            st.write(f"Response status: {e.response.status_code}")
+            st.write(f"Response headers: {e.response.headers}")
+            st.write(f"Response body: {e.response.text}")
 
 if __name__ == "__main__":
     main()
