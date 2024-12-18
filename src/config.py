@@ -9,7 +9,7 @@ CHUNK_OVERLAP = 200
 
 # Pinecone Config
 VALID_ENVIRONMENTS = [
-    "us-east-1",  # Environment corrente dall'interfaccia Pinecone
+    "us-east1-aws",  # Environment corrente dall'interfaccia Pinecone
 ]
 
 def validate_pinecone_environment(environment: str) -> bool:
