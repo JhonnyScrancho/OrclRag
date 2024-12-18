@@ -6,7 +6,7 @@ from embeddings.indexer import ensure_index_exists, update_document_in_index
 from rag.retriever import PineconeRetriever
 from rag.chain import setup_rag_chain
 from ui.utils import display_thread_preview
-from pinecone import Pinecone, PodSpec
+import pinecone  # Changed import statement
 import hashlib
 from datetime import datetime
 
@@ -60,7 +60,6 @@ def main():
     
     try:
         # Initialize Pinecone with compatible syntax
-        import pinecone
         pinecone.init(
             api_key=st.secrets["PINECONE_API_KEY"],
             environment=st.secrets["PINECONE_ENVIRONMENT"]
