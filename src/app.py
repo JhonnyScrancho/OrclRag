@@ -74,19 +74,28 @@ def main():
         # Inizializzazione Pinecone
         st.write("Tentativo di connessione a Pinecone:")
 
-        # Prova a fare una connessione diretta all'indice senza init
-        st.write("Tentativo di connessione a Pinecone:")
-
-        # Prova a fare una connessione diretta all'indice
         try:
-            index = pinecone.Index(
-                index_name=INDEX_NAME,  # Cambiato da 'name' a 'index_name'
-                host="https://forum-index-p5eyqni.svc.aped-4627-b74a.pinecone.io",
-                api_key=st.secrets["PINECONE_API_KEY"]
+            # Prima inizializziamo pinecone
+            pinecone.init(
+                api_key=st.secrets["PINECONE_API_KEY"],
+                environment=st.secrets["PINECONE_ENVIRONMENT"]
             )
+            
+            # Poi otteniamo l'indice direttamente per nome
+            index = pinecone.Index(INDEX_NAME)
+            
+            # Verifichiamo che funzioni con una query di test
+            stats = index.describe_index_stats()
+            st.write("Statistiche indice:", stats)
+            
             st.success("Connessione a Pinecone stabilita con successo!")
         except Exception as e:
-            st.error(f"Errore durante la connessione diretta all'indice: {str(e)}")
+            st.error(f"Errore durante la connessione a Pinecone: {str(e)}")
+            # Debug info aggiuntivo
+            st.write("Debug info:")
+            st.write(f"- API Key (lunghezza): {len(st.secrets['PINECONE_API_KEY'])}")
+            st.write(f"- Environment: {st.secrets['PINECONE_ENVIRONMENT']}")
+            st.write(f"- Index name: {INDEX_NAME}")
             raise
         
         # Lista degli indici disponibili
