@@ -76,13 +76,14 @@ def main():
         st.write("Tentativo di connessione a Pinecone:")
 
         try:
-            # Creiamo un'istanza di Pinecone
-            pc = Pinecone(
-                api_key=st.secrets["PINECONE_API_KEY"]
+            # Inizializzazione con la vecchia sintassi di Pinecone v2
+            pinecone.init(
+                api_key=st.secrets["PINECONE_API_KEY"],
+                environment=st.secrets["PINECONE_ENVIRONMENT"]
             )
             
-            # Ottieni l'indice usando la proprietà index
-            index = pc.index(INDEX_NAME)
+            # Ottieni l'indice
+            index = pinecone.Index(INDEX_NAME)
             
             # Test della connessione
             stats = index.describe_index_stats()
@@ -94,7 +95,6 @@ def main():
             st.write("Debug info:")
             st.write(f"- API Key (lunghezza): {len(st.secrets['PINECONE_API_KEY'])}")
             st.write(f"- Index name: {INDEX_NAME}")
-            st.write(f"- Available indexes: {pc.list_indexes().names() if pc else 'None'}")
             raise
         
         # Lista degli indici disponibili
