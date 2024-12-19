@@ -34,19 +34,16 @@ class SmartRetriever:
         if not isinstance(content, str):
             return quotes
             
-        # Pattern migliorato per le citazioni
-        patterns = [
-            r"(.*?) said:(.*?)Click to expand\.{2,3}(.*)?",  # Pattern principale con 2-3 punti
-            r"(.*?) said:(.*?)$"  # Pattern alternativo senza "Click to expand"
-        ]
+        # Pattern principale per le citazioni
+        pattern = r"(.*?) said:(.*?)(?:Click to expand\.{2,3})(.*)"
         
-        for pattern in patterns:
+        try:
             matches = re.finditer(pattern, content, re.DOTALL | re.MULTILINE)
             
             for match in matches:
                 author = match.group(1).strip()
                 quoted_text = match.group(2).strip()
-                response_text = match.group(3).strip() if len(match.groups()) > 2 and match.group(3) else ""
+                response_text = match.group(3).strip() if match.group(3) else ""
                 
                 if author and quoted_text:
                     quote = {
@@ -54,13 +51,36 @@ class SmartRetriever:
                         'quoted_text': quoted_text,
                         'response_text': response_text,
                         'quote_type': 'explicit',
-                        'original_text': match.group(0),
-                        'context_relation': 'direct_response'
+                        'original_text': match.group(0)
                     }
                     
                     # Verifica duplicati prima di aggiungere
                     if not any(q['quoted_text'] == quote['quoted_text'] for q in quotes):
                         quotes.append(quote)
+            
+            # Se non troviamo citazioni con il primo pattern, proviamo un pattern alternativo
+            if not quotes:
+                alt_pattern = r"(.*?) said:(.*?)$"
+                alt_matches = re.finditer(alt_pattern, content, re.DOTALL | re.MULTILINE)
+                
+                for match in alt_matches:
+                    author = match.group(1).strip()
+                    quoted_text = match.group(2).strip()
+                    
+                    if author and quoted_text:
+                        quote = {
+                            'quoted_author': author,
+                            'quoted_text': quoted_text,
+                            'response_text': "",
+                            'quote_type': 'explicit',
+                            'original_text': match.group(0)
+                        }
+                        
+                        if not any(q['quoted_text'] == quote['quoted_text'] for q in quotes):
+                            quotes.append(quote)
+        
+        except Exception as e:
+            logger.error(f"Error in extract_quotes: {str(e)}")
         
         return quotes
 
