@@ -21,6 +21,15 @@ class PineconeRetriever:
             st.error(f"Error fetching documents: {str(e)}")
             return []
 
+    def parse_post_content(self, text: str) -> Dict:
+        """Estrae le informazioni strutturate dal testo del post."""
+        content_dict = {}
+        for line in text.split('\n'):
+            if ': ' in line:
+                key, value = line.split(': ', 1)
+                content_dict[key.strip()] = value.strip()
+        return content_dict
+
     def extract_quotes(self, content: str) -> List[Dict]:
         """Estrae le citazioni dal contenuto."""
         quotes = []
@@ -50,32 +59,43 @@ class PineconeRetriever:
                 metadata = match.metadata
                 thread_id = metadata.get('thread_id', 'unknown')
                 content = metadata.get('text', '')
-                quotes = self.extract_quotes(content)
-                quotes_count += len(quotes)
-                threads[thread_id].append(metadata)
+                
+                # Parse del contenuto strutturato
+                parsed_content = self.parse_post_content(content)
+                
+                # Aggiungi al thread con il contenuto parsato
+                threads[thread_id].append({
+                    'metadata': metadata,
+                    'parsed_content': parsed_content,
+                    'quotes': self.extract_quotes(content)
+                })
+                quotes_count += len(self.extract_quotes(content))
 
             # Query per statistiche
             if any(keyword in query.lower() for keyword in ['quanti', 'numero', 'thread', 'post']):
-                return [Document(page_content=f"Nel database ho trovato {len(threads)} thread e {len(matches)} post.", metadata={"type": "stats"})]
+                return [Document(page_content=f"Ho trovato {len(threads)} thread e {len(matches)} post nel database.", metadata={"type": "stats"})]
 
-            # Query per citazioni
-            elif any(keyword in query.lower() for keyword in ['citazioni', 'quote', 'citano']):
-                return [Document(page_content=f"Nel database sono presenti {quotes_count} citazioni.", metadata={"type": "quotes"})]
-
-            # Query per riassunto thread
-            elif any(keyword in query.lower() for keyword in ['riassunt', 'parlano', 'discute', 'riguarda']):
-                thread_summaries = []
+            # Query per contenuto/riassunto thread
+            elif any(keyword in query.lower() for keyword in ['riassunt', 'parlano', 'discute', 'riguarda', 'cosa', 'contenuto']):
+                summaries = []
                 for thread_id, posts in threads.items():
-                    if posts:
-                        first_post = posts[0]
-                        summary = f"""Titolo: {first_post.get('thread_title')}
-URL: {first_post.get('url')}
+                    # Trova il primo post senza citazioni
+                    first_post = next((post for post in posts if not post['quotes']), posts[0])
+                    
+                    # Estrai i metadati del thread
+                    thread_meta = first_post['metadata']
+                    parsed_content = first_post['parsed_content']
+                    
+                    summary = f"""Titolo thread: {thread_meta.get('thread_title', 'N/A')}
 
-Argomento: {first_post.get('content', '').split('Content: ')[1].split('Keywords:')[0].strip() if 'Content: ' in first_post.get('content', '') else 'Non disponibile'}
+Contenuto iniziale:
+{parsed_content.get('Content', 'Non disponibile')}
 
-Totale post: {len(posts)}"""
-                        thread_summaries.append(Document(page_content=summary, metadata={"type": "summary"}))
-                return thread_summaries
+Keywords principali: {parsed_content.get('Keywords', 'Non disponibili')}"""
+
+                    summaries.append(Document(page_content=summary, metadata={"type": "summary"}))
+                
+                return summaries
 
             # Per altre query, usa la ricerca vettoriale
             query_embedding = self.embeddings.embed_query(query)
