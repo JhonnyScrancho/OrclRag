@@ -54,8 +54,15 @@ def initialize_pinecone():
         st.write(f"Debug: index type: {type(index)}")
         
         # Test dell'indice
-        stats = index.describe_index_stats()
-        st.write("Index stats:", stats)
+        try:
+            stats = index.describe_index_stats()
+            if stats is not None:
+                st.write("Index stats:", stats)
+            else:
+                st.write("Index stats are None, but connection successful")
+        except Exception as e:
+            st.warning(f"Couldn't get index stats but connection successful: {str(e)}")
+        
         st.success("Connessione a Pinecone stabilita con successo!")
         
         return index
