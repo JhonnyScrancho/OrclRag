@@ -1,4 +1,3 @@
-import streamlit as st
 from langchain_openai import ChatOpenAI
 from langchain_core.runnables import RunnablePassthrough
 from langchain_core.output_parsers import StrOutputParser
@@ -25,11 +24,11 @@ def setup_rag_chain(retriever):
     
     def format_docs(docs):
         return "\n\n".join(doc.page_content for doc in docs)
-
-    # Corretta sintassi LCEL
-    chain = (
+    
+    # Fixed LCEL chain construction
+    rag_chain = (
         {
-            "context": lambda x: format_docs(retriever.get_relevant_documents(x)),
+            "context": retriever.get_relevant_documents | format_docs,
             "query": RunnablePassthrough()
         }
         | prompt 
@@ -37,4 +36,12 @@ def setup_rag_chain(retriever):
         | StrOutputParser()
     )
     
-    return chain
+    # Create a wrapper function that accepts a dictionary with a "query" key
+    def chain_wrapper(query_dict):
+        if isinstance(query_dict, str):
+            query = query_dict
+        else:
+            query = query_dict["query"]
+        return rag_chain.invoke(query)
+    
+    return chain_wrapper
