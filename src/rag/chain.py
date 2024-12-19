@@ -1,150 +1,102 @@
-from xml.dom.minidom import Document
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.prompts import PromptTemplate
-from typing import Dict, Any, List
 import streamlit as st
+import json
 import logging
 
 logger = logging.getLogger(__name__)
 
-class RAGChain:
-    def __init__(self, retriever, model_name: str = "gpt-3.5-turbo", temperature: float = 0):
-        self.retriever = retriever
-        self.llm = ChatOpenAI(
-            model_name=model_name,
-            temperature=temperature,
-            api_key=st.secrets["OPENAI_API_KEY"]
-        )
-        self.setup_prompts()
-        
-    def setup_prompts(self):
-        """Configura i template delle prompt per diversi scenari."""
-        self.base_prompt = """Sei un assistente esperto nell'analisi di discussioni di forum. 
-Segui questi principi nel fornire le tue risposte:
+def setup_rag_chain(retriever):
+    """Configura e restituisce una chain RAG avanzata."""
+    llm = ChatOpenAI(
+        model_name="gpt-4-turbo-preview",  # Usiamo GPT-4 per migliore comprensione
+        temperature=0.7,  # Più creatività nelle risposte
+        api_key=st.secrets["OPENAI_API_KEY"]
+    )
+    
+    template = """Sei un analista esperto di forum online con accesso a dati dettagliati sulle discussioni.
+Hai piena libertà di analizzare e interpretare i dati forniti nel modo più appropriato.
 
-1. ACCURATEZZA:
-- Rispondi SOLO basandoti sui documenti forniti
-- Non fare supposizioni o aggiunte
-- Se le informazioni non sono sufficienti, dichiaralo esplicitamente
-- Cita specifiche parti del testo quando possibile
+LINEE GUIDA PER L'ANALISI:
 
-2. COMPRENSIONE DEL CONTESTO:
-- Considera la discussione nel suo insieme
-- Mantieni la cronologia e il flusso della conversazione
-- Identifica e collega temi ricorrenti
-- Evidenzia le relazioni tra i diversi post
+1. CONTENUTO E CONTESTO
+- Analizza il significato e il contesto della discussione
+- Identifica i temi principali e secondari
+- Considera il tono e lo stile della conversazione
 
-3. STRUTTURA DELLA RISPOSTA:
-- Inizia con una chiara panoramica
-- Organizza le informazioni in modo logico
-- Usa punti elenco solo quando appropriato
-- Fornisci dettagli specifici con citazioni quando rilevante
+2. METRICHE E TREND
+- Esamina i sentiment e la loro evoluzione
+- Analizza le keywords e la loro rilevanza
+- Valuta i pattern di interazione tra utenti
 
-4. FOCUS SULLA QUERY:
-- Indirizza direttamente la domanda posta
-- Mantieni la risposta pertinente
-- Evita divagazioni non necessarie
+3. DINAMICHE SOCIALI
+- Osserva i ruoli degli utenti nella discussione
+- Identifica leader e partecipanti chiave
+- Analizza la qualità e profondità delle interazioni
 
-Documenti di contesto:
+4. INSIGHT SPECIFICI
+- Cerca pattern non ovvi
+- Identifica connessioni interessanti
+- Evidenzia aspetti unici o notevoli
+
+I dati completi della discussione sono strutturati come segue:
 {context}
 
-Domanda: {query}
+Domanda dell'utente: {query}
 
-Fornisci una risposta strutturata, precisa e basata esclusivamente sui documenti forniti."""
+ISTRUZIONI PER LA RISPOSTA:
+1. Fornisci un'analisi approfondita e pertinente
+2. Usa dati concreti per supportare le tue osservazioni
+3. Evidenzia insight non ovvi quando rilevanti
+4. Mantieni un tono professionale ma accessibile
+5. Rispondi in italiano in modo naturale e discorsivo
 
-        self.summary_prompt = """Analizza questa discussione del forum e fornisci un riassunto strutturato.
-Focus su:
-- Argomento principale e scopo della discussione
-- Punti chiave sollevati
-- Eventuali conclusioni o consensi raggiunti
-- Temi ricorrenti o pattern nella discussione
-
-Documenti:
-{context}
-
-Produci un riassunto coeso e informativo."""
-
-        self.stat_prompt = """Analizza questi dati statistici del forum e fornisci un'interpretazione chiara.
-Evidenzia:
-- Numeri chiave
-- Tendenze significative
-- Confronti rilevanti
-- Insight notevoli
-
-Dati:
-{context}
-
-Fornisci un'analisi concisa e significativa."""
-
-    def select_prompt(self, query: str) -> str:
-        """Seleziona il template appropriato in base al tipo di query."""
-        if any(keyword in query.lower() for keyword in ['riassunto', 'riassumi', 'sintetizza']):
-            return self.summary_prompt
-        elif any(keyword in query.lower() for keyword in ['statistiche', 'numeri', 'quanti']):
-            return self.stat_prompt
-        return self.base_prompt
-
-    def process_documents(self, docs: List[Document]) -> str:
-        """Processa e formatta i documenti per il contesto."""
-        if not docs:
-            return "Nessun documento disponibile."
-            
-        context = []
-        for doc in docs:
-            if doc.metadata.get("type") == "error":
-                return doc.page_content
-                
-            content = f"""
----
-{doc.page_content}
-Similarità: {doc.metadata.get('similarity_score', 'N/A')}
----
-"""
-            context.append(content)
-            
-        return "\n".join(context)
-
-    def __call__(self, query_input: Dict[str, str]) -> Dict[str, str]:
-        """Esegue la catena RAG completa."""
+Se la domanda è specifica (es. numero di post), fornisci prima la risposta diretta e poi eventuali insight aggiuntivi se rilevanti."""
+    
+    def get_response(query_input):
+        """Processa la query e genera una risposta."""
         try:
             query = query_input.get("query", "") if isinstance(query_input, dict) else query_input
+            docs = retriever.get_relevant_documents(query)
             
-            # Recupera documenti rilevanti
-            docs = self.retriever.get_relevant_documents(query)
             if not docs:
                 return {
-                    "result": "Mi dispiace, non ho trovato informazioni sufficienti per rispondere alla tua domanda.",
-                    "documents": []
+                    "result": "Mi dispiace, non ho trovato dati sufficienti per rispondere alla tua domanda.",
+                    "error": True
                 }
             
-            # Processa il contesto
-            context = self.process_documents(docs)
+            # Estrai l'analisi ricca dal metadata
+            rich_analysis = docs[0].metadata.get("analysis", {})
+            if not rich_analysis:
+                return {
+                    "result": "Non sono riuscito a recuperare un'analisi dettagliata dei dati.",
+                    "error": True
+                }
             
-            # Seleziona e formatta la prompt
-            prompt_template = self.select_prompt(query)
-            formatted_prompt = prompt_template.format(context=context, query=query)
+            # Formatta il contesto in modo naturale
+            context = json.dumps(rich_analysis, indent=2, ensure_ascii=False)
             
-            # Genera la risposta
             messages = [
-                SystemMessage(content="Sei un assistente esperto nell'analisi di discussioni di forum."),
-                HumanMessage(content=formatted_prompt)
+                SystemMessage(content="""Sei un analista esperto di forum online. 
+Il tuo obiettivo è fornire insight profondi e significativi, basati sui dati ma con un'interpretazione intelligente e naturale.
+Usa la tua conoscenza per identificare pattern interessanti e connessioni non ovvie."""),
+                HumanMessage(content=template.format(context=context, query=query))
             ]
             
-            response = self.llm.invoke(messages)
+            response = llm.invoke(messages)
             
             return {
-                "result": response.content if hasattr(response, 'content') else str(response),
-                "documents": docs
+                "result": response.content,
+                "error": False,
+                "analysis": rich_analysis  # Include l'analisi completa per riferimento
             }
             
         except Exception as e:
             logger.error(f"Error in RAG chain: {str(e)}", exc_info=True)
             return {
-                "result": f"Mi dispiace, c'è stato un errore nell'elaborazione della risposta: {str(e)}",
-                "documents": []
+                "result": f"Si è verificato un errore durante l'elaborazione della risposta: {str(e)}",
+                "error": True
             }
-
-def setup_rag_chain(retriever):
-    """Funzione helper per creare un'istanza della catena RAG."""
-    return RAGChain(retriever)
+    
+    return get_response
