@@ -106,62 +106,6 @@ def fetch_all_documents(index):
         st.error(f"Errore recupero documenti: {str(e)}")
         return []
 
-def delete_documents(index, doc_ids):
-    """
-    Esegue hard delete dei documenti specificati da Pinecone
-    """
-    try:
-        if isinstance(doc_ids, str):
-            doc_ids = [doc_ids]
-            
-        # Verifica che i documenti esistano prima dell'eliminazione
-        existing_docs = index.fetch(ids=doc_ids)
-        if not existing_docs.vectors:
-            st.warning("Nessun documento trovato con gli ID specificati")
-            return False
-            
-        # Esegue l'hard delete
-        index.delete(
-            ids=doc_ids,
-            namespace=""  # namespace di default
-        )
-        
-        # Verifica che i documenti siano stati effettivamente eliminati
-        verification = index.fetch(ids=doc_ids)
-        if verification.vectors:
-            st.error("Eliminazione non riuscita - i documenti sono ancora presenti")
-            return False
-            
-        return True
-        
-    except Exception as e:
-        st.error(f"Errore durante l'eliminazione: {str(e)}")
-        return False
-
-def delete_all_documents(index):
-    """
-    Esegue hard delete di tutti i documenti nell'indice
-    """
-    try:
-        # Forza il delete_all con conferma esplicita
-        index.delete(
-            delete_all=True,
-            namespace=""  # namespace di default
-        )
-        
-        # Verifica che l'indice sia effettivamente vuoto
-        stats = index.describe_index_stats()
-        if stats['total_vector_count'] > 0:
-            st.error("Eliminazione totale non riuscita - documenti ancora presenti")
-            return False
-            
-        st.session_state.processed_threads.clear()
-        return True
-        
-    except Exception as e:
-        st.error(f"Errore durante l'eliminazione totale: {str(e)}")
-        return False
-
 def verify_delete_permissions(index):
     """
     Verifica i permessi di eliminazione sull'indice
@@ -267,29 +211,35 @@ def display_database_view(index):
                 use_container_width=True
             )
             
-            # Sostituisci questa parte
-            if st.button("Elimina selezionati"):
-                if selected_rows is not None and len(selected_rows) > 0:
-                    # Verifica permessi
-                    has_permissions, message = verify_delete_permissions(index)
-                    if has_permissions:
-                        if delete_documents(index, selected_rows['ID'].tolist()):
-                            st.success("Documenti eliminati correttamente")
-                            st.rerun()
-                    else:
-                        st.error(f"Impossibile procedere: {message}")
+            col1, col2 = st.columns(2)
             
-            # E questa parte
-            if st.button("Elimina tutto"):
-                if st.checkbox("Conferma eliminazione totale"):
-                    # Verifica permessi
-                    has_permissions, message = verify_delete_permissions(index)
-                    if has_permissions:
-                        if delete_all_documents(index):
-                            st.success("Database svuotato correttamente")
+            # Eliminazione selettiva
+            with col1:
+                if st.button("Elimina selezionati", key="delete_selected"):
+                    if selected_rows is not None and len(selected_rows) > 0:
+                        try:
+                            ids_to_delete = selected_rows['ID'].tolist()
+                            # Usa direttamente l'API Pinecone per eliminare
+                            index._index.delete(ids=ids_to_delete)
+                            st.success(f"Eliminati {len(ids_to_delete)} documenti")
+                            time.sleep(1)  # Piccola pausa per assicurarsi che l'operazione sia completata
                             st.rerun()
-                    else:
-                        st.error(f"Impossibile procedere: {message}")
+                        except Exception as e:
+                            st.error(f"Errore durante l'eliminazione: {str(e)}")
+            
+            # Eliminazione totale
+            with col2:
+                if st.button("🗑️ Elimina TUTTO", type="primary", key="delete_all"):
+                    confirmation = st.checkbox("⚠️ Conferma eliminazione TOTALE del database", key="confirm_delete")
+                    if confirmation:
+                        try:
+                            # Usa direttamente l'API Pinecone per eliminare tutto
+                            index._index.delete(delete_all=True)
+                            st.success("Database completamente svuotato!")
+                            time.sleep(1)  # Piccola pausa per assicurarsi che l'operazione sia completata
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Errore durante l'eliminazione totale: {str(e)}")
         else:
             st.info("Nessun documento nel database")
 
