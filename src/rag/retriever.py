@@ -29,101 +29,101 @@ class SmartRetriever:
             logger.error(f"Error fetching documents: {str(e)}")
             return []
 
-    def extract_quotes(self, content: str) -> List[Dict]:
-        """Estrae le citazioni dal contenuto con contesto conversazionale."""
+    def extract_quotes(self, post: Dict) -> List[Dict]:
+        """
+        Estrae le citazioni dal contenuto di un post.
+        Ora gestisce correttamente tutte le varianti di citazione presenti nel contenuto.
+        """
         quotes = []
+        content = post.get('content', '')
+        
         if not isinstance(content, str):
             return quotes
-            
-        # Pattern migliorato per le citazioni con cattura del contesto
-        pattern = r"(.*?) said:(.*?)Click to expand\.\.\.(.*)"
+
+        # Pattern principale per le citazioni (cattura l'intera struttura)
+        pattern = r"([\w\s]+) said:(.*?)Click to expand\.\.\.(.*)"
         matches = re.finditer(pattern, content, re.DOTALL)
         
         for match in matches:
-            author = match.group(1).strip()
+            quoted_author = match.group(1).strip()
             quoted_text = match.group(2).strip()
             response_text = match.group(3).strip() if match.group(3) else ""
             
-            if author and quoted_text:
+            if quoted_author and quoted_text:
                 quotes.append({
-                    'quoted_author': author,
+                    'quote_id': f"{post.get('post_id')}_{len(quotes)}",
+                    'quoted_author': quoted_author,
                     'quoted_text': quoted_text,
                     'response_text': response_text,
-                    'quote_type': 'explicit',
-                    'original_text': match.group(0),
-                    'context_relation': 'direct_response'  # Indica una risposta diretta al post citato
+                    'quoting_author': post.get('author'),
+                    'post_time': post.get('post_time'),
+                    'post_id': post.get('post_id'),
+                    'sentiment': post.get('sentiment', 0),
+                    'keywords': post.get('keywords', [])
                 })
         
         return quotes
 
-    def build_conversation_context(self, posts: List[Dict]) -> Dict[str, Any]:
-        """Costruisce il contesto conversazionale basato sulle citazioni."""
-        conversation_context = {
-            'discussion_threads': [],  # Lista di thread di discussione collegati
-            'response_chains': defaultdict(list),  # Catene di risposta
-            'topic_context': defaultdict(list)  # Contesto per argomento
+    def build_conversation_tree(self, posts: List[Dict]) -> Dict:
+        """
+        Costruisce un albero della conversazione basato sulle citazioni.
+        """
+        conversation_tree = {
+            'posts_by_id': {},
+            'citation_chains': [],
+            'author_interactions': defaultdict(list)
         }
 
-        # Traccia le relazioni tra post
-        post_relations = defaultdict(list)
-        
+        # Prima passata: organizza i post per ID e estrai le citazioni
         for post in posts:
-            post_id = post.get('post_id', '')
-            quotes = post.get('quotes', [])
+            post_id = post.get('post_id')
+            quotes = self.extract_quotes(post)
             
-            for quote in quotes:
-                quoted_author = quote['quoted_author']
-                quoted_text = quote['quoted_text']
-                
-                # Trova il post originale citato
-                original_post = next(
-                    (p for p in posts if p['author'] == quoted_author and quoted_text in p.get('content', '')),
-                    None
-                )
-                
-                if original_post:
-                    # Aggiungi al contesto conversazionale
-                    thread_context = {
-                        'original_post': {
-                            'author': original_post['author'],
-                            'content': original_post['content'],
-                            'time': original_post['time'],
-                            'sentiment': original_post['sentiment']
-                        },
-                        'response': {
-                            'author': post['author'],
-                            'content': post['content'],
-                            'time': post['time'],
-                            'sentiment': post['sentiment'],
-                            'quoted_part': quoted_text
-                        },
-                        'context_type': 'direct_response',
-                        'topic_keywords': list(set(original_post['keywords']).intersection(post['keywords']))
-                    }
-                    
-                    conversation_context['discussion_threads'].append(thread_context)
-                    conversation_context['response_chains'][original_post['author']].append({
-                        'responder': post['author'],
-                        'response_type': 'quoted_reply',
-                        'time': post['time']
-                    })
+            conversation_tree['posts_by_id'][post_id] = {
+                'post': post,
+                'quotes': quotes,
+                'replies': []
+            }
 
-        return conversation_context
+            # Traccia le interazioni tra autori
+            for quote in quotes:
+                conversation_tree['author_interactions'][post['author']].append({
+                    'interacts_with': quote['quoted_author'],
+                    'interaction_type': 'quote',
+                    'timestamp': post['post_time']
+                })
+
+        # Seconda passata: costruisci le catene di citazioni
+        for post_id, post_data in conversation_tree['posts_by_id'].items():
+            for quote in post_data['quotes']:
+                # Trova il post originale citato
+                for original_id, original_data in conversation_tree['posts_by_id'].items():
+                    original_post = original_data['post']
+                    if (original_post['author'] == quote['quoted_author'] and 
+                        quote['quoted_text'] in original_post['content']):
+                        # Aggiungi alla catena di citazioni
+                        conversation_tree['citation_chains'].append({
+                            'original_post_id': original_id,
+                            'quoting_post_id': post_id,
+                            'quote_data': quote
+                        })
+                        # Aggiungi alla lista di risposte del post originale
+                        original_data['replies'].append(post_id)
+
+        return conversation_tree
 
     def get_thread_analysis(self, matches: List[Any]) -> Dict:
-        """Analizza il thread con contesto conversazionale avanzato."""
+        """Analizza in profondità il contenuto del thread."""
         thread_data = defaultdict(lambda: {
             'posts': [],
-            'conversation_context': None,
             'sentiment_trend': [],
             'keywords_frequency': defaultdict(int),
             'authors': set(),
-            'conversation_flow': [],
+            'conversation_tree': None,
             'quotes_analysis': {
                 'total_quotes': 0,
-                'quote_network': defaultdict(list),
-                'most_quoted': defaultdict(int),
-                'conversation_threads': []
+                'quotes_by_author': defaultdict(list),
+                'most_quoted_authors': defaultdict(int)
             },
             'title': '',
             'url': '',
@@ -134,51 +134,49 @@ class SmartRetriever:
         for match in matches:
             metadata = match.metadata
             thread_id = metadata.get('thread_id', 'unknown')
-            content = metadata.get('text', '')
             
-            # Estrai citazioni e costruisci il post
-            quotes = self.extract_quotes(content)
+            # Costruisci il post con tutti i metadati necessari
             post = {
-                'post_id': metadata.get('post_id', ''),
+                'post_id': metadata.get('post_id', f"post_{len(thread_data[thread_id]['posts'])}"),
                 'author': metadata.get('author', 'Unknown'),
-                'time': metadata.get('post_time', 'Unknown'),
-                'content': content,
+                'content': metadata.get('text', ''),
+                'post_time': metadata.get('post_time', 'Unknown'),
                 'sentiment': metadata.get('sentiment', 0),
                 'keywords': metadata.get('keywords', []),
-                'quotes': quotes,
-                'has_quotes': bool(quotes)
             }
             
             thread = thread_data[thread_id]
             thread['posts'].append(post)
+            
+            # Aggiorna metadati thread
+            if not thread['title']:
+                thread['title'] = metadata.get('thread_title', 'Unknown Title')
+                thread['url'] = metadata.get('url', 'Unknown URL')
+                thread['scrape_time'] = metadata.get('scrape_time', '')
+            
+            # Aggiorna statistiche
             thread['sentiment_trend'].append(post['sentiment'])
             thread['authors'].add(post['author'])
             
-            # Aggiorna statistiche citazioni e contesto
-            if quotes:
-                thread['quotes_analysis']['total_quotes'] += len(quotes)
-                for quote in quotes:
-                    thread['quotes_analysis']['quote_network'][post['author']].append({
-                        'quoted_author': quote['quoted_author'],
-                        'quoted_text': quote['quoted_text'],
-                        'response_text': quote['response_text'],
-                        'timestamp': post['time'],
-                        'context_relation': quote['context_relation']
-                    })
-                    thread['quotes_analysis']['most_quoted'][quote['quoted_author']] += 1
-            
-            # Analisi keywords nel contesto
             for kw in post['keywords']:
                 thread['keywords_frequency'][kw] += 1
-        
-        # Costruisci il contesto conversazionale per ogni thread
+            
+        # Costruisci l'albero della conversazione per ogni thread
         for thread_id, thread in thread_data.items():
-            thread['conversation_context'] = self.build_conversation_context(thread['posts'])
-        
+            conversation_tree = self.build_conversation_tree(thread['posts'])
+            thread['conversation_tree'] = conversation_tree
+            
+            # Aggiorna analisi citazioni
+            for chain in conversation_tree['citation_chains']:
+                quote_data = chain['quote_data']
+                thread['quotes_analysis']['total_quotes'] += 1
+                thread['quotes_analysis']['quotes_by_author'][quote_data['quoting_author']].append(quote_data)
+                thread['quotes_analysis']['most_quoted_authors'][quote_data['quoted_author']] += 1
+            
         return dict(thread_data)
 
     def get_relevant_documents(self, query: str) -> List[Document]:
-        """Recupera documenti con contesto conversazionale arricchito."""
+        """Recupera e analizza i documenti rilevanti."""
         try:
             matches = self.get_all_documents()
             if not matches:
@@ -200,36 +198,25 @@ class SmartRetriever:
                     "scrape_time": analysis['scrape_time'],
                     "total_posts": len(analysis['posts']),
                     "unique_authors": len(analysis['authors']),
-                    "conversation_context": analysis['conversation_context'],
-                    "quotes_analysis": analysis['quotes_analysis'],
+                    "total_quotes": analysis['quotes_analysis']['total_quotes'],
+                    "conversation_tree": analysis['conversation_tree'],
                     "sentiment_analysis": {
                         "average": sum(analysis['sentiment_trend']) / len(analysis['sentiment_trend']) if analysis['sentiment_trend'] else 0,
                         "trend": analysis['sentiment_trend']
                     },
-                    "keywords_analysis": {
-                        "top_keywords": sorted(analysis['keywords_frequency'].items(), key=lambda x: x[1], reverse=True)[:10],
-                        "total_unique_keywords": len(analysis['keywords_frequency'])
-                    },
-                    "conversation_dynamics": {
-                        "total_replies": sum(1 for flow in analysis['conversation_flow'] if flow['type'] == 'reply'),
-                        "new_topics": sum(1 for flow in analysis['conversation_flow'] if flow['type'] == 'new_topic'),
-                        "total_quotes": analysis['quotes_analysis']['total_quotes'],
-                        "conversation_threads": analysis['quotes_analysis']['conversation_threads'],
-                        "most_quoted_authors": sorted(
-                            analysis['quotes_analysis']['most_quoted'].items(),
+                    "interaction_analysis": {
+                        "most_active_quoters": sorted(
+                            [(author, len(quotes)) for author, quotes in analysis['quotes_analysis']['quotes_by_author'].items()],
+                            key=lambda x: x[1],
+                            reverse=True
+                        ),
+                        "most_quoted": sorted(
+                            analysis['quotes_analysis']['most_quoted_authors'].items(),
                             key=lambda x: x[1],
                             reverse=True
                         )
                     },
-                    "posts": [{
-                        "author": post['author'],
-                        "time": post['time'],
-                        "content": post['content'],
-                        "sentiment": post['sentiment'],
-                        "keywords": post['keywords'],
-                        "quotes": post['quotes'],
-                        "has_quotes": post['has_quotes']
-                    } for post in analysis['posts']]
+                    "posts": analysis['posts']
                 }
                 rich_context["threads"].append(thread_context)
             
