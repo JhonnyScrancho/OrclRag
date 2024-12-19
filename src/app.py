@@ -7,6 +7,7 @@ from embeddings.indexer import update_document_in_index
 from rag.retriever import PineconeRetriever
 from rag.chain import setup_rag_chain
 import hashlib
+import time
 from datetime import datetime
 from pinecone import Pinecone
 from config import INDEX_NAME
@@ -106,22 +107,61 @@ def fetch_all_documents(index):
         return []
 
 def delete_documents(index, doc_ids):
-    """Elimina documenti dall'indice."""
+    """
+    Elimina documenti da Pinecone in batch per rispettare i rate limits
+    """
     try:
         if isinstance(doc_ids, str):
             doc_ids = [doc_ids]
-        index.delete(ids=doc_ids)
+        
+        # Dividi in batch di massimo 100 ID per richiesta
+        BATCH_SIZE = 100
+        for i in range(0, len(doc_ids), BATCH_SIZE):
+            batch = doc_ids[i:i + BATCH_SIZE]
+            
+            # Aggiungi un piccolo delay tra le richieste
+            time.sleep(0.5)
+            
+            try:
+                index.delete(ids=batch)
+                st.write(f"Eliminato batch {i//BATCH_SIZE + 1}/{(len(doc_ids) + BATCH_SIZE - 1)//BATCH_SIZE}")
+            except Exception as batch_error:
+                st.warning(f"Errore nell'eliminazione del batch {i//BATCH_SIZE + 1}: {str(batch_error)}")
+                continue
+        
         return True
     except Exception as e:
         st.error(f"Errore eliminazione documenti: {str(e)}")
         return False
 
 def delete_all_documents(index):
-    """Elimina tutti i documenti."""
+    """
+    Elimina tutti i documenti rispettando i rate limits
+    """
     try:
-        index.delete(delete_all=True)
-        st.session_state.processed_threads.clear()
-        return True
+        # Prima recupera tutti gli ID
+        results = index.query(
+            vector=[0] * 1536,
+            top_k=10000,
+            include_metadata=True
+        )
+        
+        if not results.matches:
+            st.warning("Nessun documento da eliminare")
+            return True
+            
+        # Estrai gli ID
+        doc_ids = [match.id for match in results.matches]
+        
+        # Usa la funzione batch per eliminare
+        success = delete_documents(index, doc_ids)
+        
+        if success:
+            st.session_state.processed_threads.clear()
+            return True
+            
+        return False
+        
     except Exception as e:
         st.error(f"Errore eliminazione totale: {str(e)}")
         return False
