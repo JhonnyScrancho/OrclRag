@@ -108,63 +108,90 @@ def fetch_all_documents(index):
 
 def delete_documents(index, doc_ids):
     """
-    Elimina documenti da Pinecone in batch per rispettare i rate limits
+    Esegue hard delete dei documenti specificati da Pinecone
     """
     try:
         if isinstance(doc_ids, str):
             doc_ids = [doc_ids]
-        
-        # Dividi in batch di massimo 100 ID per richiesta
-        BATCH_SIZE = 100
-        for i in range(0, len(doc_ids), BATCH_SIZE):
-            batch = doc_ids[i:i + BATCH_SIZE]
             
-            # Aggiungi un piccolo delay tra le richieste
-            time.sleep(0.5)
+        # Verifica che i documenti esistano prima dell'eliminazione
+        existing_docs = index.fetch(ids=doc_ids)
+        if not existing_docs.vectors:
+            st.warning("Nessun documento trovato con gli ID specificati")
+            return False
             
-            try:
-                index.delete(ids=batch)
-                st.write(f"Eliminato batch {i//BATCH_SIZE + 1}/{(len(doc_ids) + BATCH_SIZE - 1)//BATCH_SIZE}")
-            except Exception as batch_error:
-                st.warning(f"Errore nell'eliminazione del batch {i//BATCH_SIZE + 1}: {str(batch_error)}")
-                continue
+        # Esegue l'hard delete
+        index.delete(
+            ids=doc_ids,
+            namespace=""  # namespace di default
+        )
         
+        # Verifica che i documenti siano stati effettivamente eliminati
+        verification = index.fetch(ids=doc_ids)
+        if verification.vectors:
+            st.error("Eliminazione non riuscita - i documenti sono ancora presenti")
+            return False
+            
         return True
+        
     except Exception as e:
-        st.error(f"Errore eliminazione documenti: {str(e)}")
+        st.error(f"Errore durante l'eliminazione: {str(e)}")
         return False
 
 def delete_all_documents(index):
     """
-    Elimina tutti i documenti rispettando i rate limits
+    Esegue hard delete di tutti i documenti nell'indice
     """
     try:
-        # Prima recupera tutti gli ID
-        results = index.query(
-            vector=[0] * 1536,
-            top_k=10000,
-            include_metadata=True
+        # Forza il delete_all con conferma esplicita
+        index.delete(
+            delete_all=True,
+            namespace=""  # namespace di default
         )
         
-        if not results.matches:
-            st.warning("Nessun documento da eliminare")
-            return True
+        # Verifica che l'indice sia effettivamente vuoto
+        stats = index.describe_index_stats()
+        if stats['total_vector_count'] > 0:
+            st.error("Eliminazione totale non riuscita - documenti ancora presenti")
+            return False
             
-        # Estrai gli ID
-        doc_ids = [match.id for match in results.matches]
-        
-        # Usa la funzione batch per eliminare
-        success = delete_documents(index, doc_ids)
-        
-        if success:
-            st.session_state.processed_threads.clear()
-            return True
-            
-        return False
+        st.session_state.processed_threads.clear()
+        return True
         
     except Exception as e:
-        st.error(f"Errore eliminazione totale: {str(e)}")
+        st.error(f"Errore durante l'eliminazione totale: {str(e)}")
         return False
+
+def verify_delete_permissions(index):
+    """
+    Verifica i permessi di eliminazione sull'indice
+    """
+    try:
+        # Tenta di eliminare un documento di test
+        test_id = "test_permissions"
+        test_vector = [0.0] * 1536
+        
+        # Inserisce un vettore di test
+        index.upsert(
+            vectors=[{
+                "id": test_id,
+                "values": test_vector,
+                "metadata": {"test": True}
+            }]
+        )
+        
+        # Prova ad eliminarlo
+        index.delete(ids=[test_id])
+        
+        # Verifica l'eliminazione
+        verification = index.fetch(ids=[test_id])
+        if verification.vectors:
+            return False, "Permessi di eliminazione insufficienti"
+            
+        return True, "Permessi di eliminazione OK"
+        
+    except Exception as e:
+        return False, f"Errore verifica permessi: {str(e)}"
 
 def display_chat_interface(index, embeddings):
     """Interfaccia chat."""
@@ -240,17 +267,29 @@ def display_database_view(index):
                 use_container_width=True
             )
             
+            # Sostituisci questa parte
             if st.button("Elimina selezionati"):
                 if selected_rows is not None and len(selected_rows) > 0:
-                    if delete_documents(index, selected_rows['ID'].tolist()):
-                        st.success("Documenti eliminati")
-                        st.rerun()
+                    # Verifica permessi
+                    has_permissions, message = verify_delete_permissions(index)
+                    if has_permissions:
+                        if delete_documents(index, selected_rows['ID'].tolist()):
+                            st.success("Documenti eliminati correttamente")
+                            st.rerun()
+                    else:
+                        st.error(f"Impossibile procedere: {message}")
             
+            # E questa parte
             if st.button("Elimina tutto"):
                 if st.checkbox("Conferma eliminazione totale"):
-                    if delete_all_documents(index):
-                        st.success("Database svuotato")
-                        st.rerun()
+                    # Verifica permessi
+                    has_permissions, message = verify_delete_permissions(index)
+                    if has_permissions:
+                        if delete_all_documents(index):
+                            st.success("Database svuotato correttamente")
+                            st.rerun()
+                    else:
+                        st.error(f"Impossibile procedere: {message}")
         else:
             st.info("Nessun documento nel database")
 
