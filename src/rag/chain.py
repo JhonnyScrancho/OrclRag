@@ -28,7 +28,14 @@ Dati del forum:
 Domanda: {query}
 
 Fornisci una risposta concisa e pertinente in italiano, citando le parti rilevanti della conversazione quando appropriato.
-Quando citi un post, usa il formato: "[Autore] ha scritto: '...'"""
+Quando citi un post, usa il formato: "[Autore] ha scritto: '...'
+
+REGOLE:
+1. Rispondi SOLO a ciò che viene chiesto
+2. Sii breve e diretto
+3. Per domande numeriche, dai prima il numero e poi solo insight essenziali
+4. Se rilevi citazioni, indicale esplicitamente
+5. Non fare analisi non richieste """
     
     def get_response(query_input):
         try:
