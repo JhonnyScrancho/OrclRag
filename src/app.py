@@ -53,6 +53,12 @@ def initialize_pinecone():
     try:
         pc = Pinecone(api_key=st.secrets["PINECONE_API_KEY"])
         index = pc.Index(INDEX_NAME)
+        
+        # Verifica che l'indice contenga dati
+        stats = index.describe_index_stats()
+        if stats['total_vector_count'] == 0:
+            st.warning("Il database è vuoto. Carica dei dati dalla tab 'Caricamento'.")
+            
         return index
     except Exception as e:
         st.error(f"Errore connessione Pinecone: {str(e)}")
@@ -61,11 +67,6 @@ def initialize_pinecone():
 def process_and_index_thread(thread, embeddings, index):
     """Processa e indicizza un thread."""
     thread_id = get_thread_id(thread)
-    
-    # Verifica se il thread è già processato
-    if thread_id in st.session_state.processed_threads:
-        st.info(f"Thread '{thread['title']}' già processato")
-        return 0
     
     try:
         texts = process_thread(thread)
@@ -94,7 +95,7 @@ def fetch_all_documents(index):
     """Recupera tutti i documenti dall'indice."""
     try:
         response = index.query(
-            vector=[0] * 1536,  # dimensione standard OpenAI embeddings
+            vector=[0] * 1536,
             top_k=10000,
             include_metadata=True
         )
@@ -128,15 +129,19 @@ def display_chat_interface(index, embeddings):
     """Interfaccia chat."""
     st.header("💬 Chat con l'Oracolo")
     
+    # Verifica che ci siano dati nel database
+    stats = index.describe_index_stats()
+    if stats['total_vector_count'] == 0:
+        st.warning("Il database è vuoto. Non ci sono dati da consultare.")
+        return
+    
+    # Mostra la cronologia dei messaggi
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
     
+    # Input chat
     if prompt := st.chat_input("Chiedi all'Oracolo..."):
-        if not st.session_state.processed_threads:
-            st.warning("Carica prima alcuni dati.")
-            return
-        
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.markdown(prompt)
@@ -219,7 +224,8 @@ def main():
         
         embeddings = get_embeddings()
         
-        tab1, tab2, tab3 = st.tabs(["Chat", "Caricamento", "Database"])
+        # Mostra la chat come tab principale
+        tab1, tab2, tab3 = st.tabs(["💬 Chat", "📤 Caricamento", "🗄️ Database"])
         
         with tab1:
             display_chat_interface(index, embeddings)
