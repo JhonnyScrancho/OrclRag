@@ -42,7 +42,13 @@ def ensure_index_exists(pinecone_client):
 def update_document_in_index(index, doc_id: str, embedding: List[float], metadata: dict):
     """Aggiorna o inserisce un documento nell'indice."""
     try:
-        index.upsert(vectors=[(doc_id, embedding, metadata)])
+        index.upsert(
+            vectors=[{
+                "id": doc_id,
+                "values": embedding,
+                "metadata": metadata
+            }]
+        )
     except Exception as e:
         logger.error(f"Error in update_document_in_index: {str(e)}", exc_info=True)
         raise
