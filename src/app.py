@@ -159,7 +159,7 @@ def display_chat_interface(index, embeddings):
             st.markdown(prompt)
         
         try:
-            retriever = PineconeRetriever(index, embeddings)
+            retriever = SmartRetriever(index, embeddings)
             chain = setup_rag_chain(retriever)
             
             with st.chat_message("assistant"):
