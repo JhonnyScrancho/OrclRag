@@ -14,7 +14,7 @@ class PineconeRetriever:
         try:
             results = self.index.query(
                 vector=[0] * 1536,
-                top_k=10000,  # Get all documents
+                top_k=10000,
                 include_metadata=True
             )
             return results.matches
@@ -26,88 +26,109 @@ class PineconeRetriever:
         """Get comprehensive database statistics."""
         matches = self._fetch_all_metadata()
         
-        # Aggregate statistics
-        stats = {
-            'total_posts': len(matches),
-            'unique_threads': set(),
-            'unique_authors': set(),
-            'posts_by_thread': defaultdict(int),
-            'posts_by_author': defaultdict(int),
-            'keywords_frequency': defaultdict(int),
-            'earliest_post': None,
-            'latest_post': None,
-            'threads_details': []
-        }
+        # Initialize thread tracking
+        unique_threads = {}
+        post_quotes = []
         
         for match in matches:
             metadata = match.metadata
             thread_id = metadata.get('thread_id')
             thread_title = metadata.get('thread_title')
-            author = metadata.get('author')
-            post_time = metadata.get('post_time')
-            keywords = metadata.get('keywords', [])
             
-            # Update aggregations
-            if thread_id and thread_title:
-                stats['unique_threads'].add((thread_id, thread_title))
-                stats['posts_by_thread'][thread_title] += 1
+            # Track unique threads
+            if thread_id and thread_title and thread_id not in unique_threads:
+                unique_threads[thread_id] = {
+                    'title': thread_title,
+                    'url': metadata.get('url'),
+                    'total_posts': metadata.get('total_posts', 0),
+                    'scrape_time': metadata.get('scrape_time')
+                }
             
-            if author:
-                stats['unique_authors'].add(author)
-                stats['posts_by_author'][author] += 1
-            
-            for keyword in keywords:
-                stats['keywords_frequency'][keyword] += 1
-            
-            # Track thread details
-            thread_info = {
-                'title': thread_title,
-                'url': metadata.get('url'),
-                'total_posts': stats['posts_by_thread'][thread_title],
-                'unique_authors': set([author]),
-                'keywords': set(keywords)
-            }
-            
-            if thread_info not in stats['threads_details']:
-                stats['threads_details'].append(thread_info)
+            # Track quotes
+            if metadata.get('quoted_author'):
+                post_quotes.append({
+                    'quoted_author': metadata.get('quoted_author'),
+                    'quoted_content': metadata.get('quoted_content'),
+                    'post_author': metadata.get('author')
+                })
         
-        return stats
+        return {
+            'threads': unique_threads,
+            'total_threads': len(unique_threads),
+            'total_posts': len(matches),
+            'quotes': post_quotes
+        }
+    
+    def get_thread_summary(self, thread_id=None):
+        """Generate a summary of thread content."""
+        matches = self._fetch_all_metadata()
+        
+        # Get the first thread if none specified
+        if not thread_id and matches:
+            thread_id = matches[0].metadata.get('thread_id')
+        
+        thread_posts = []
+        thread_info = {}
+        
+        for match in matches:
+            metadata = match.metadata
+            if metadata.get('thread_id') == thread_id:
+                if not thread_info:
+                    thread_info = {
+                        'title': metadata.get('thread_title'),
+                        'url': metadata.get('url'),
+                        'total_posts': metadata.get('total_posts')
+                    }
+                
+                post_content = {
+                    'author': metadata.get('author'),
+                    'content': metadata.get('text', '').split('Content: ')[-1].split('Keywords:')[0].strip(),
+                    'post_time': metadata.get('post_time'),
+                    'quoted_author': metadata.get('quoted_author'),
+                    'quoted_content': metadata.get('quoted_content')
+                }
+                thread_posts.append(post_content)
+        
+        return thread_info, thread_posts
     
     def get_relevant_documents(self, query: str) -> List[Document]:
         """Get relevant documents based on query type."""
         try:
-            # If query is about database statistics/content
-            if any(keyword in query.lower() for keyword in ['quanti', 'numero', 'cosa parlano', 'argomenti', 'temi', 'statistic']):
+            # Handle specific query types
+            if any(keyword in query.lower() for keyword in ['quanti', 'numero', 'thread', 'post']):
                 stats = self.get_database_stats()
                 
-                # Create comprehensive analysis document
-                analysis = f"""Analisi completa del database:
-
-Statistiche Generali:
-- Totale posts: {stats['total_posts']}
-- Thread unici: {len(stats['unique_threads'])}
-- Autori unici: {len(stats['unique_authors'])}
-
-Threads principali:
+                analysis = f"""Statistiche del Database:
+- Numero di thread: {stats['total_threads']}
+- Numero totale di post: {stats['total_posts']}
 """
-                
-                for thread in stats['threads_details']:
-                    analysis += f"""
-• {thread['title']}
-  - Posts totali: {thread['total_posts']}
-  - Autori unici: {len(thread['unique_authors'])}
-  - Keywords principali: {', '.join(list(thread['keywords'])[:5])}
-"""
-                
-                # Add keyword analysis
-                top_keywords = sorted(stats['keywords_frequency'].items(), key=lambda x: x[1], reverse=True)[:10]
-                analysis += "\nKeywords più frequenti:\n"
-                for keyword, freq in top_keywords:
-                    analysis += f"- {keyword}: {freq} occorrenze\n"
-                
                 return [Document(page_content=analysis, metadata={"type": "analysis"})]
             
-            # For specific queries, use vector search
+            # Handle quote queries
+            elif 'cit' in query.lower() or 'quot' in query.lower():
+                stats = self.get_database_stats()
+                quotes_text = "Citazioni nei post:\n\n"
+                for quote in stats['quotes']:
+                    quotes_text += f"- {quote['post_author']} cita {quote['quoted_author']}: {quote['quoted_content']}\n\n"
+                return [Document(page_content=quotes_text, metadata={"type": "quotes"})]
+            
+            # Handle thread summary queries
+            elif 'riassunto' in query.lower() or 'parlano' in query.lower():
+                thread_info, posts = self.get_thread_summary()
+                if thread_info:
+                    summary = f"""Thread: {thread_info['title']}
+URL: {thread_info['url']}
+Totale posts: {thread_info['total_posts']}
+
+Contenuto principale:
+"""
+                    # Add first post content as it usually contains the main topic
+                    if posts:
+                        summary += f"\n{posts[0]['content']}\n"
+                        
+                    return [Document(page_content=summary, metadata={"type": "summary"})]
+            
+            # For other queries, use vector search
             query_embedding = self.embeddings.embed_query(query)
             results = self.index.query(
                 vector=query_embedding,
