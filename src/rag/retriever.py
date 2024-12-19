@@ -29,60 +29,78 @@ class SmartRetriever:
             return []
 
     def extract_quotes(self, content: str) -> List[Dict]:
-        """Estrae le citazioni dal contenuto con pattern corretto per il formato del forum."""
+        """Estrae le citazioni dal contenuto con pattern migliorato."""
         quotes = []
-        if not isinstance(content, str):
+        if not isinstance(content, str) or not content.strip():
             return quotes
-            
-        # Pattern principale modificato per matchare il formato esatto del forum
-        main_pattern = r"([^:]+?) said:(.*?)(?:Click to expand\.{3}|$)(.*)"
         
         try:
-            matches = re.finditer(main_pattern, content, re.DOTALL | re.MULTILINE)
+            # Pattern principale per le citazioni nel formato del forum
+            main_pattern = r'([^:\n]+?) said:(.*?)(?:(?=\n[^:]*? said:)|$)'
             
+            # Debug log del contenuto
+            logger.info(f"Analyzing content for quotes: {content[:200]}...")
+            
+            matches = re.finditer(main_pattern, content, re.DOTALL)
             for match in matches:
                 author = match.group(1).strip()
                 quoted_text = match.group(2).strip()
-                response_text = match.group(3).strip() if match.group(3) else ""
+                
+                # Pulisce il testo citato da "Click to expand..."
+                if 'Click to expand' in quoted_text:
+                    quoted_text = quoted_text.split('Click to expand')[0].strip()
                 
                 if author and quoted_text:
                     quote = {
                         'quoted_author': author,
                         'quoted_text': quoted_text,
-                        'response_text': response_text,
-                        'quote_type': 'explicit',
-                        'original_text': match.group(0)
+                        'quote_type': 'explicit'
                     }
                     
-                    # Verifica duplicati prima di aggiungere
+                    # Debug log
+                    logger.info(f"Found quote from {author}: {quoted_text[:50]}...")
+                    
+                    # Evita duplicati
                     if not any(q['quoted_text'] == quote['quoted_text'] for q in quotes):
                         quotes.append(quote)
             
-            # Pattern alternativo per citazioni senza "Click to expand"
-            if not quotes:
-                alt_pattern = r"([^:]+?) said:(.*?)(?=$|\n)"
-                alt_matches = re.finditer(alt_pattern, content, re.DOTALL | re.MULTILINE)
-                
-                for match in alt_matches:
-                    author = match.group(1).strip()
-                    quoted_text = match.group(2).strip()
-                    
-                    if author and quoted_text:
-                        quote = {
-                            'quoted_author': author,
-                            'quoted_text': quoted_text,
-                            'response_text': "",
-                            'quote_type': 'explicit',
-                            'original_text': match.group(0)
-                        }
-                        
-                        if not any(q['quoted_text'] == quote['quoted_text'] for q in quotes):
-                            quotes.append(quote)
-        
+            # Log del risultato
+            if quotes:
+                logger.info(f"Successfully extracted {len(quotes)} quotes")
+            else:
+                logger.info("No quotes found in content")
+            
         except Exception as e:
-            logger.error(f"Error in extract_quotes: {str(e)}")
+            logger.error(f"Error extracting quotes: {str(e)}", exc_info=True)
         
         return quotes
+    
+    def process_content(self, metadata: Dict) -> str:
+        """Processa il contenuto del post preservando o ricostruendo il formato delle citazioni."""
+        try:
+            # Prima controlliamo se abbiamo il testo diretto
+            content = metadata.get('text', '')
+            if not content:
+                logger.warning("No text found in metadata")
+                return ""
+            
+            # Se il contenuto contiene già citazioni nel formato corretto, lo restituiamo
+            if ' said:' in content and ('Click to expand' in content or content.count('\n') > 0):
+                return content
+            
+            # Proviamo a ricostruire dalla struttura originale del post
+            # Nota: il contenuto originale potrebbe essere nel campo 'content' invece che 'text'
+            original_content = metadata.get('content', content)
+            
+            # Debug log
+            logger.info(f"Processing content. Original length: {len(original_content)}")
+            logger.info(f"Content starts with: {original_content[:100]}...")
+            
+            return original_content
+            
+        except Exception as e:
+            logger.error(f"Error in process_content: {str(e)}", exc_info=True)
+            return ""
 
     def build_conversation_context(self, posts: List[Dict]) -> Dict[str, Any]:
         """Costruisce il contesto conversazionale con gestione migliorata delle citazioni."""
@@ -304,6 +322,13 @@ class SmartRetriever:
             matches = self.get_all_documents()
             if not matches:
                 return [Document(page_content="Nessun documento trovato", metadata={"type": "error"})]
+            
+            # Processa ogni documento per estrarre citazioni
+            for match in matches:
+                content = self.process_content(match.metadata)
+                quotes = self.extract_quotes(content)
+                match.metadata['quotes'] = quotes
+                match.metadata['quotes_count'] = len(quotes)
             
             thread_analysis = self.get_thread_analysis(matches)
             
