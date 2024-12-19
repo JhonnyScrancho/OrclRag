@@ -17,12 +17,19 @@ class PineconeRetriever:
             st.error(f"Errore nel recupero statistiche: {str(e)}")
             return 0
     
+    def get_stats_metadata(self):
+        """Create metadata about index statistics."""
+        total_docs = self.get_total_documents()
+        return f"Il database contiene attualmente {total_docs} posts totali."
+    
     def get_relevant_documents(self, query: str) -> List[Document]:
         """Get relevant documents for a query."""
         try:
-            # Log total documents
-            total_docs = self.get_total_documents()
-            st.write(f"Debug - Totale documenti nell'indice: {total_docs}")
+            # Add stats to every query response
+            stats_doc = Document(
+                page_content=self.get_stats_metadata(),
+                metadata={"type": "stats"}
+            )
             
             # Get query embedding
             query_embedding = self.embeddings.embed_query(query)
@@ -34,10 +41,8 @@ class PineconeRetriever:
                 include_metadata=True
             )
             
-            # Log matches
-            st.write(f"Debug - Documenti trovati per la query: {len(results.matches)}")
-            
-            documents = []
+            # Create regular documents
+            documents = [stats_doc]  # Add stats as first document
             for result in results.matches:
                 if result.metadata.get("text"):
                     documents.append(

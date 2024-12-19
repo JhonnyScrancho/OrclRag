@@ -12,8 +12,11 @@ def setup_rag_chain(retriever):
         api_key=st.secrets["OPENAI_API_KEY"]
     )
     
-    template = """Sei un assistente italiano esperto. Usa le seguenti informazioni per rispondere alla domanda in italiano. 
-    Se non trovi informazioni pertinenti nel contesto, rispondi "Mi dispiace, non ho trovato informazioni rilevanti per rispondere alla tua domanda."
+    template = """Sei un assistente italiano esperto che aiuta a consultare un database di posts. Il contesto fornito include sempre informazioni sulle statistiche del database nella prima riga.
+
+    Se la domanda riguarda il numero di posts o statistiche del database, usa quelle informazioni per rispondere.
+    Se la domanda riguarda il contenuto specifico dei posts, usa le informazioni fornite nel contesto.
+    Se non trovi informazioni pertinenti, rispondi "Mi dispiace, non ho trovato informazioni rilevanti per rispondere alla tua domanda."
 
     Contesto fornito: {context}
     
@@ -25,35 +28,21 @@ def setup_rag_chain(retriever):
     
     def get_response(query_input):
         try:
-            # Handle input dictionary
             if isinstance(query_input, dict):
                 query = query_input.get("query", "")
             else:
                 query = query_input
             
-            # Get relevant documents
             docs = retriever.get_relevant_documents(query)
-            
-            # Log number of documents found
-            st.write(f"Debug - Documenti trovati: {len(docs)}")
-            
-            # Format the context
             context = "\n\n".join(doc.page_content for doc in docs)
             
-            # If no context found
             if not context.strip():
                 return {"result": "Mi dispiace, non ho trovato informazioni rilevanti per rispondere alla tua domanda."}
             
-            # Generate prompt
             formatted_prompt = prompt.format(context=context, query=query)
-            
-            # Create message
             messages = [HumanMessage(content=formatted_prompt)]
-            
-            # Get LLM response
             response = llm.invoke(messages)
             
-            # Return the content
             result = response.content if hasattr(response, 'content') else str(response)
             return {"result": result}
             
