@@ -25,10 +25,13 @@ def setup_rag_chain(retriever):
     
     def format_docs(docs):
         return "\n\n".join(doc.page_content for doc in docs)
-    
+
+    # Corretta sintassi LCEL
     chain = (
-        {"context": retriever.get_relevant_documents | format_docs, 
-         "query": RunnablePassthrough()}
+        {
+            "context": lambda x: format_docs(retriever.get_relevant_documents(x)),
+            "query": RunnablePassthrough()
+        }
         | prompt 
         | llm 
         | StrOutputParser()
