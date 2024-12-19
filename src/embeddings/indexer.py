@@ -12,10 +12,12 @@ def ensure_index_exists(pinecone_client):
         # Debug: mostra le impostazioni di connessione
         st.write("Tentativo di connessione a Pinecone:")
         st.write(f"- Nome indice richiesto: {INDEX_NAME}")
-        st.write(f"- Environment: {st.secrets['PINECONE_ENVIRONMENT']}")
+        
+        # Nuova sintassi per Pinecone v3
+        pc = Pinecone(api_key=st.secrets["PINECONE_API_KEY"])
         
         # Get list of existing indexes
-        existing_indexes = pinecone_client.list_indexes()
+        existing_indexes = pc.list_indexes().names()
         
         if INDEX_NAME not in existing_indexes:
             available_indexes = ', '.join(existing_indexes) if existing_indexes else 'nessuno'
@@ -24,7 +26,7 @@ def ensure_index_exists(pinecone_client):
             raise ValueError(error_msg)
         
         # Get the index
-        index = pinecone_client.Index(INDEX_NAME)
+        index = pc.Index(INDEX_NAME)
         st.success(f"Connesso con successo all'indice: {INDEX_NAME}")
         return index
         
@@ -32,7 +34,6 @@ def ensure_index_exists(pinecone_client):
         error_msg = f"""
         Errore durante la connessione a Pinecone: {str(e)}
         - API Key length: {len(st.secrets['PINECONE_API_KEY'])}
-        - Environment: {st.secrets['PINECONE_ENVIRONMENT']}
         - Indice richiesto: {INDEX_NAME}
         """
         logger.error(error_msg)
