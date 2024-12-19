@@ -154,14 +154,14 @@ def display_chat_interface(index, embeddings):
             with st.chat_message("assistant"):
                 with st.spinner("Elaborazione..."):
                     response = chain({"query": prompt})
-                    st.markdown(response['result'])
+                    st.markdown(response["result"])
                     
                     if st.toggle("Mostra fonti"):
-                        for doc in response['source_documents']:
+                        for doc in retriever.get_relevant_documents(prompt):
                             st.info(doc.metadata.get('thread_title'))
                             st.markdown(doc.page_content)
             
-            st.session_state.messages.append({"role": "assistant", "content": response['result']})
+            st.session_state.messages.append({"role": "assistant", "content": response["result"]})
         except Exception as e:
             st.error(f"Errore generazione risposta: {str(e)}")
 
