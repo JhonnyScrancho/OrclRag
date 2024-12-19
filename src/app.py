@@ -6,9 +6,9 @@ from embeddings.indexer import ensure_index_exists, update_document_in_index
 from rag.retriever import PineconeRetriever
 from rag.chain import setup_rag_chain
 from ui.utils import display_thread_preview
-import pinecone
 import hashlib
 from datetime import datetime
+from pinecone import Pinecone
 from config import INDEX_NAME
 import logging
 
