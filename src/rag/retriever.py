@@ -5,7 +5,6 @@ from langchain_core.documents import Document
 from collections import defaultdict
 import logging
 import json
-import statistics
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
@@ -20,7 +19,7 @@ class SmartRetriever:
         """Recupera tutti i documenti dall'indice."""
         try:
             results = self.index.query(
-                vector=[0] * 1536,
+                vector=[0] * 1536,  # Vector di zeri per recuperare tutti i documenti
                 top_k=self.MAX_DOCUMENTS,
                 include_metadata=True
             )
@@ -30,88 +29,138 @@ class SmartRetriever:
             return []
 
     def extract_quotes(self, content: str) -> List[Dict]:
-        """Estrae le citazioni dal contenuto con contesto conversazionale."""
+        """Estrae le citazioni dal contenuto con pattern migliorato."""
         quotes = []
         if not isinstance(content, str):
             return quotes
             
-        # Pattern migliorato per le citazioni con cattura del contesto
-        pattern = r"(.*?) said:(.*?)Click to expand\.\.\.(.*)"
-        matches = re.finditer(pattern, content, re.DOTALL)
+        # Pattern migliorato per le citazioni
+        patterns = [
+            r"(.*?) said:(.*?)Click to expand\.{2,3}(.*)?",  # Pattern principale con 2-3 punti
+            r"(.*?) said:(.*?)$"  # Pattern alternativo senza "Click to expand"
+        ]
         
-        for match in matches:
-            author = match.group(1).strip()
-            quoted_text = match.group(2).strip()
-            response_text = match.group(3).strip() if match.group(3) else ""
+        for pattern in patterns:
+            matches = re.finditer(pattern, content, re.DOTALL | re.MULTILINE)
             
-            if author and quoted_text:
-                quotes.append({
-                    'quoted_author': author,
-                    'quoted_text': quoted_text,
-                    'response_text': response_text,
-                    'quote_type': 'explicit',
-                    'original_text': match.group(0),
-                    'context_relation': 'direct_response'  # Indica una risposta diretta al post citato
-                })
+            for match in matches:
+                author = match.group(1).strip()
+                quoted_text = match.group(2).strip()
+                response_text = match.group(3).strip() if len(match.groups()) > 2 and match.group(3) else ""
+                
+                if author and quoted_text:
+                    quote = {
+                        'quoted_author': author,
+                        'quoted_text': quoted_text,
+                        'response_text': response_text,
+                        'quote_type': 'explicit',
+                        'original_text': match.group(0),
+                        'context_relation': 'direct_response'
+                    }
+                    
+                    # Verifica duplicati prima di aggiungere
+                    if not any(q['quoted_text'] == quote['quoted_text'] for q in quotes):
+                        quotes.append(quote)
         
         return quotes
 
     def build_conversation_context(self, posts: List[Dict]) -> Dict[str, Any]:
-        """Costruisce il contesto conversazionale basato sulle citazioni."""
+        """Costruisce il contesto conversazionale con gestione migliorata delle citazioni."""
         conversation_context = {
-            'discussion_threads': [],  # Lista di thread di discussione collegati
-            'response_chains': defaultdict(list),  # Catene di risposta
-            'topic_context': defaultdict(list)  # Contesto per argomento
+            'discussion_threads': [],
+            'response_chains': defaultdict(list),
+            'topic_context': defaultdict(list),
+            'quotes_network': defaultdict(list),
+            'temporal_flow': []
         }
 
-        # Traccia le relazioni tra post
-        post_relations = defaultdict(list)
-        
+        # Indicizza i post per autore per ricerca rapida
+        posts_by_author = defaultdict(list)
         for post in posts:
-            post_id = post.get('post_id', '')
-            quotes = post.get('quotes', [])
+            posts_by_author[post.get('author', '')].append(post)
+        
+        # Ordina i post per timestamp per analisi temporale
+        sorted_posts = sorted(posts, key=lambda x: x.get('time', ''))
+        
+        for post in sorted_posts:
+            quotes = self.extract_quotes(post.get('content', ''))
+            post['quotes'] = quotes  # Salva le citazioni nel post
+            
+            # Aggiungi al flusso temporale
+            conversation_context['temporal_flow'].append({
+                'time': post.get('time', ''),
+                'author': post.get('author', ''),
+                'has_quotes': bool(quotes),
+                'sentiment': post.get('sentiment', 0),
+                'keywords': post.get('keywords', [])
+            })
             
             for quote in quotes:
                 quoted_author = quote['quoted_author']
                 quoted_text = quote['quoted_text']
                 
-                # Trova il post originale citato
+                # Cerca il post originale citato
+                original_posts = posts_by_author.get(quoted_author, [])
                 original_post = next(
-                    (p for p in posts if p['author'] == quoted_author and quoted_text in p.get('content', '')),
+                    (p for p in original_posts if quoted_text in p.get('content', '')),
                     None
                 )
                 
                 if original_post:
-                    # Aggiungi al contesto conversazionale
                     thread_context = {
                         'original_post': {
-                            'author': original_post['author'],
-                            'content': original_post['content'],
-                            'time': original_post['time'],
-                            'sentiment': original_post['sentiment']
+                            'author': original_post.get('author', ''),
+                            'content': original_post.get('content', ''),
+                            'time': original_post.get('time', ''),
+                            'sentiment': original_post.get('sentiment', 0)
                         },
                         'response': {
-                            'author': post['author'],
-                            'content': post['content'],
-                            'time': post['time'],
-                            'sentiment': post['sentiment'],
+                            'author': post.get('author', ''),
+                            'content': post.get('content', ''),
+                            'time': post.get('time', ''),
+                            'sentiment': post.get('sentiment', 0),
                             'quoted_part': quoted_text
                         },
                         'context_type': 'direct_response',
-                        'topic_keywords': list(set(original_post['keywords']).intersection(post['keywords']))
+                        'topic_keywords': list(
+                            set(original_post.get('keywords', [])) & 
+                            set(post.get('keywords', []))
+                        ),
+                        'time_delta': self._calculate_time_delta(
+                            original_post.get('time', ''),
+                            post.get('time', '')
+                        )
                     }
                     
                     conversation_context['discussion_threads'].append(thread_context)
-                    conversation_context['response_chains'][original_post['author']].append({
-                        'responder': post['author'],
+                    conversation_context['quotes_network'][quoted_author].append({
+                        'responder': post.get('author', ''),
+                        'quote': quoted_text,
+                        'response': quote.get('response_text', ''),
+                        'time': post.get('time', '')
+                    })
+
+                    # Aggiungi alla catena di risposte
+                    conversation_context['response_chains'][original_post.get('author', '')].append({
+                        'responder': post.get('author', ''),
                         'response_type': 'quoted_reply',
-                        'time': post['time']
+                        'time': post.get('time', ''),
+                        'sentiment_delta': post.get('sentiment', 0) - original_post.get('sentiment', 0)
                     })
 
         return conversation_context
 
+    def _calculate_time_delta(self, time1: str, time2: str) -> Optional[float]:
+        """Calcola la differenza temporale tra due timestamp."""
+        try:
+            t1 = datetime.strptime(time1, "%Y-%m-%dT%H:%M:%S%z")
+            t2 = datetime.strptime(time2, "%Y-%m-%dT%H:%M:%S%z")
+            return (t2 - t1).total_seconds() / 3600  # Ritorna la differenza in ore
+        except (ValueError, TypeError):
+            return None
+
     def get_thread_analysis(self, matches: List[Any]) -> Dict:
-        """Analizza il thread con contesto conversazionale avanzato."""
+        """Analisi thread con conteggio citazioni migliorato e metriche avanzate."""
         thread_data = defaultdict(lambda: {
             'posts': [],
             'conversation_context': None,
@@ -123,7 +172,17 @@ class SmartRetriever:
                 'total_quotes': 0,
                 'quote_network': defaultdict(list),
                 'most_quoted': defaultdict(int),
-                'conversation_threads': []
+                'conversation_threads': [],
+                'response_times': [],
+                'sentiment_analysis': {
+                    'quote_responses': [],
+                    'original_posts': []
+                }
+            },
+            'temporal_analysis': {
+                'post_frequency': defaultdict(int),
+                'activity_hours': defaultdict(int),
+                'response_patterns': []
             },
             'title': '',
             'url': '',
@@ -136,7 +195,7 @@ class SmartRetriever:
             thread_id = metadata.get('thread_id', 'unknown')
             content = metadata.get('text', '')
             
-            # Estrai citazioni e costruisci il post
+            # Estrai e analizza le citazioni
             quotes = self.extract_quotes(content)
             post = {
                 'post_id': metadata.get('post_id', ''),
@@ -154,27 +213,69 @@ class SmartRetriever:
             thread['sentiment_trend'].append(post['sentiment'])
             thread['authors'].add(post['author'])
             
-            # Aggiorna statistiche citazioni e contesto
+            # Analisi temporale
+            try:
+                post_time = datetime.strptime(post['time'], "%Y-%m-%dT%H:%M:%S%z")
+                thread['temporal_analysis']['post_frequency'][post_time.date().isoformat()] += 1
+                thread['temporal_analysis']['activity_hours'][post_time.hour] += 1
+            except (ValueError, TypeError):
+                pass
+            
+            # Aggiorna statistiche citazioni e analisi avanzate
             if quotes:
                 thread['quotes_analysis']['total_quotes'] += len(quotes)
                 for quote in quotes:
+                    # Network di citazioni
                     thread['quotes_analysis']['quote_network'][post['author']].append({
                         'quoted_author': quote['quoted_author'],
                         'quoted_text': quote['quoted_text'],
                         'response_text': quote['response_text'],
                         'timestamp': post['time'],
-                        'context_relation': quote['context_relation']
+                        'sentiment': post['sentiment']
                     })
                     thread['quotes_analysis']['most_quoted'][quote['quoted_author']] += 1
+                    
+                    # Analisi del sentiment nelle risposte
+                    thread['quotes_analysis']['sentiment_analysis']['quote_responses'].append(post['sentiment'])
+            else:
+                # Sentiment dei post originali
+                thread['quotes_analysis']['sentiment_analysis']['original_posts'].append(post['sentiment'])
             
-            # Analisi keywords nel contesto
-            for kw in post['keywords']:
-                thread['keywords_frequency'][kw] += 1
+            # Aggiorna keywords
+            for keyword in post['keywords']:
+                thread['keywords_frequency'][keyword] += 1
+            
+            # Metadati thread
+            if not thread['title']:
+                thread['title'] = metadata.get('thread_title', '')
+                thread['url'] = metadata.get('url', '')
+                thread['scrape_time'] = metadata.get('timestamp', '')
         
-        # Costruisci il contesto conversazionale per ogni thread
+        # Costruisci il contesto conversazionale e analisi finale
         for thread_id, thread in thread_data.items():
+            # Analisi conversazionale
             thread['conversation_context'] = self.build_conversation_context(thread['posts'])
-        
+            
+            # Calcola metriche aggiuntive
+            if thread['quotes_analysis']['sentiment_analysis']['quote_responses']:
+                thread['quotes_analysis']['sentiment_analysis']['avg_response_sentiment'] = (
+                    sum(thread['quotes_analysis']['sentiment_analysis']['quote_responses']) /
+                    len(thread['quotes_analysis']['sentiment_analysis']['quote_responses'])
+                )
+            
+            if thread['quotes_analysis']['sentiment_analysis']['original_posts']:
+                thread['quotes_analysis']['sentiment_analysis']['avg_original_sentiment'] = (
+                    sum(thread['quotes_analysis']['sentiment_analysis']['original_posts']) /
+                    len(thread['quotes_analysis']['sentiment_analysis']['original_posts'])
+                )
+            
+            # Ordina e limita le keywords più frequenti
+            thread['top_keywords'] = sorted(
+                thread['keywords_frequency'].items(),
+                key=lambda x: x[1],
+                reverse=True
+            )[:10]
+            
         return dict(thread_data)
 
     def get_relevant_documents(self, query: str) -> List[Document]:
@@ -211,16 +312,15 @@ class SmartRetriever:
                         "total_unique_keywords": len(analysis['keywords_frequency'])
                     },
                     "conversation_dynamics": {
-                        "total_replies": sum(1 for flow in analysis['conversation_flow'] if flow['type'] == 'reply'),
-                        "new_topics": sum(1 for flow in analysis['conversation_flow'] if flow['type'] == 'new_topic'),
                         "total_quotes": analysis['quotes_analysis']['total_quotes'],
-                        "conversation_threads": analysis['quotes_analysis']['conversation_threads'],
+                        "conversation_threads": analysis['quotes_analysis'].get('conversation_threads', []),
                         "most_quoted_authors": sorted(
                             analysis['quotes_analysis']['most_quoted'].items(),
                             key=lambda x: x[1],
                             reverse=True
                         )
                     },
+                    "temporal_analysis": analysis['temporal_analysis'],
                     "posts": [{
                         "author": post['author'],
                         "time": post['time'],
