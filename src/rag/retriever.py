@@ -1,4 +1,4 @@
-import streamlit as st
+import streamlit as st 
 from typing import List, Dict
 from langchain_core.documents import Document
 from collections import defaultdict
@@ -16,35 +16,36 @@ class PineconeRetriever:
                 top_k=10000,
                 include_metadata=True
             )
-            if not results.matches:
-                st.warning("Nessun documento trovato nel database")
-                return []
-                
-            st.write("Debug - Primo documento:", results.matches[0].metadata)
             return results.matches
         except Exception as e:
             st.error(f"Error fetching documents: {str(e)}")
             return []
 
-    def extract_quotes_from_content(self, content: str) -> List[Dict]:
-        """Estrae le citazioni dal contenuto di un post."""
-        quotes = []
-        lines = content.split('\n')
-        current_quote = None
-
+    def parse_content(self, text: str) -> Dict:
+        """Estrae le informazioni strutturate dal testo."""
+        lines = text.split('\n')
+        data = {}
+        current_field = None
+        
         for line in lines:
-            if ' said:' in line:
-                current_quote = {
-                    'quoted_author': line.split(' said:')[0].strip(),
-                    'quoted_content': ''
-                }
-            elif current_quote and 'Click to expand...' in line:
-                if current_quote['quoted_content'].strip():
-                    quotes.append(current_quote)
-                current_quote = None
-            elif current_quote:
-                current_quote['quoted_content'] += line + '\n'
+            if ': ' in line:
+                key, value = line.split(': ', 1)
+                data[key.strip()] = value.strip()
+                
+        return data
 
+    def extract_quotes(self, content: str) -> List[Dict]:
+        """Estrae le citazioni dal contenuto."""
+        quotes = []
+        if ' said:' in content and 'Click to expand...' in content:
+            parts = content.split(' said:', 1)
+            if len(parts) == 2:
+                author = parts[0].strip()
+                quoted_content = parts[1].split('Click to expand...')[0].strip()
+                quotes.append({
+                    'author': author,
+                    'content': quoted_content
+                })
         return quotes
 
     def get_relevant_documents(self, query: str) -> List[Document]:
@@ -54,69 +55,64 @@ class PineconeRetriever:
             if not matches:
                 return [Document(page_content="Database vuoto o errore di accesso.", metadata={"type": "error"})]
 
-            # Organizziamo i thread e i post
-            threads = defaultdict(lambda: {"posts": [], "title": "", "url": "", "scrape_time": ""})
-            total_quotes = 0
-
+            # Raggruppa per thread_id
+            threads = defaultdict(list)
+            quotes_count = 0
+            
             for match in matches:
                 metadata = match.metadata
-                text = metadata.get('text', '')
                 thread_id = metadata.get('thread_id', 'unknown')
+                content = metadata.get('text', '')
                 
-                # Aggiorniamo le informazioni del thread
-                if not threads[thread_id]["title"]:
-                    threads[thread_id].update({
-                        "title": metadata.get('thread_title', ''),
-                        "url": metadata.get('url', ''),
-                        "scrape_time": metadata.get('scrape_time', '')
-                    })
-
-                # Analizziamo il contenuto per le citazioni
-                quotes = self.extract_quotes_from_content(text)
-                total_quotes += len(quotes)
-
-                # Aggiungiamo il post alla lista del thread
-                threads[thread_id]["posts"].append({
-                    "author": metadata.get('author', ''),
-                    "content": text,
-                    "post_time": metadata.get('post_time', ''),
-                    "quotes": quotes
+                # Estrai citazioni
+                quotes = self.extract_quotes(content)
+                quotes_count += len(quotes)
+                
+                # Aggiungi al thread appropriato
+                threads[thread_id].append({
+                    'metadata': metadata,
+                    'content': content,
+                    'quotes': quotes,
+                    'parsed_content': self.parse_content(content)
                 })
 
-            # Gestiamo diversi tipi di query
+            # Query per statistiche
             if any(keyword in query.lower() for keyword in ['quanti', 'numero', 'thread', 'post']):
-                stats = f"""Nel database ho trovato:
-- {len(threads)} thread
-- {sum(len(t['posts']) for t in threads.values())} post totali"""
+                stats = f"Nel database ho trovato {len(threads)} thread e {len(matches)} post."
                 return [Document(page_content=stats, metadata={"type": "stats"})]
 
+            # Query per citazioni
             elif any(keyword in query.lower() for keyword in ['citazioni', 'quote', 'citano']):
-                quotes_text = f"Nel database sono presenti {total_quotes} citazioni nei post."
-                return [Document(page_content=quotes_text, metadata={"type": "quotes"})]
+                quote_stats = f"Nel database sono presenti {quotes_count} citazioni."
+                return [Document(page_content=quote_stats, metadata={"type": "quotes"})]
 
+            # Query per riassunto thread
             elif any(keyword in query.lower() for keyword in ['riassunt', 'parlano', 'discute', 'riguarda']):
                 summaries = []
-                for thread_id, thread_data in threads.items():
-                    if thread_data["posts"]:
-                        first_post = next((p for p in thread_data["posts"] if not p["quotes"]), thread_data["posts"][0])
+                for thread_id, posts in threads.items():
+                    if not posts:
+                        continue
                         
-                        summary = f"""Thread: "{thread_data['title']}"
-URL: {thread_data['url']}
+                    # Prendi i metadati del thread dal primo post
+                    thread_meta = posts[0]['metadata']
+                    
+                    # Trova il primo post (quello senza citazioni)
+                    first_post = next((post for post in posts if not post['quotes']), posts[0])
+                    
+                    summary = f"""Titolo thread: {thread_meta.get('thread_title')}
+URL: {thread_meta.get('url')}
 
 Post iniziale:
-Autore: {first_post['author']}
-Data: {first_post['post_time']}
-Contenuto: {first_post['content']}
+Autore: {first_post['parsed_content'].get('Author', 'Sconosciuto')}
+Contenuto: {first_post['parsed_content'].get('Content', 'Non disponibile')}
 
-Statistiche discussione:
-- Totale post: {len(thread_data['posts'])}
-- Citazioni: {sum(len(p['quotes']) for p in thread_data['posts'])}"""
-                        
-                        summaries.append(Document(page_content=summary, metadata={"type": "summary"}))
+La discussione contiene {len(posts)} post totali."""
+
+                    summaries.append(Document(page_content=summary, metadata={"type": "summary"}))
                 
-                return summaries
+                return summaries if summaries else [Document(page_content="Nessun thread trovato.", metadata={"type": "summary"})]
 
-            # Per altre query, utilizziamo la ricerca vettoriale
+            # Per altre query, usa la ricerca vettoriale
             query_embedding = self.embeddings.embed_query(query)
             results = self.index.query(
                 vector=query_embedding,
