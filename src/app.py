@@ -30,20 +30,29 @@ def get_thread_id(thread):
     thread_key = f"{thread['url']}_{thread['scrape_time']}"
     return hashlib.md5(thread_key.encode()).hexdigest()
 
-def reinit_pinecone():
-    """Reinizializza la connessione a Pinecone."""
-    from pinecone import Pinecone
-    
-    # Nuova sintassi di inizializzazione
-    pc = Pinecone(api_key=st.secrets["PINECONE_API_KEY"])
-    
-    # Ottieni l'indice
+def initialize_pinecone():
+    """Inizializza la connessione a Pinecone e restituisce l'indice."""
     try:
-        index = pc.Index("forum-index")
-        st.write("Pinecone initialization successful")
-        return index
+        st.write("Tentativo di connessione a Pinecone:")
+        
+        # Inizializza client Pinecone
+        pc = Pinecone(api_key=st.secrets["PINECONE_API_KEY"])
+        
+        # Ottieni l'indice direttamente
+        index = pc.Index(INDEX_NAME)
+        
+        # Prova una operazione sull'indice per verificare la connessione
+        try:
+            stats = index.describe_index_stats()
+            st.write("Index stats:", stats)
+            st.success("Connessione a Pinecone stabilita con successo!")
+            return index
+        except Exception as e:
+            st.error(f"Errore nell'accesso all'indice: {str(e)}")
+            raise
+            
     except Exception as e:
-        st.write(f"Pinecone initialization failed: {str(e)}")
+        st.error(f"Errore nell'inizializzazione di Pinecone: {str(e)}")
         raise
 
 def process_and_index_thread(thread, embeddings, index):

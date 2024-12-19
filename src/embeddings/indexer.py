@@ -2,7 +2,6 @@ from typing import List
 import streamlit as st
 from config import INDEX_NAME
 import logging
-import pinecone
 
 logger = logging.getLogger(__name__)
 
