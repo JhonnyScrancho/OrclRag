@@ -1,4 +1,5 @@
 import streamlit as st
+from config import INDEX_NAME, LLM_MODEL 
 from data.loader import load_json
 from data.processor import process_thread
 from embeddings.generator import create_chunks, get_embeddings
