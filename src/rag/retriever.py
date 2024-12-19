@@ -29,16 +29,16 @@ class SmartRetriever:
             return []
 
     def extract_quotes(self, content: str) -> List[Dict]:
-        """Estrae le citazioni dal contenuto con pattern migliorato."""
+        """Estrae le citazioni dal contenuto con pattern corretto per il formato del forum."""
         quotes = []
         if not isinstance(content, str):
             return quotes
             
-        # Pattern principale per le citazioni
-        pattern = r"(.*?) said:(.*?)(?:Click to expand\.{2,3})(.*)"
+        # Pattern principale modificato per matchare il formato esatto del forum
+        main_pattern = r"([^:]+?) said:(.*?)(?:Click to expand\.{3}|$)(.*)"
         
         try:
-            matches = re.finditer(pattern, content, re.DOTALL | re.MULTILINE)
+            matches = re.finditer(main_pattern, content, re.DOTALL | re.MULTILINE)
             
             for match in matches:
                 author = match.group(1).strip()
@@ -58,9 +58,9 @@ class SmartRetriever:
                     if not any(q['quoted_text'] == quote['quoted_text'] for q in quotes):
                         quotes.append(quote)
             
-            # Se non troviamo citazioni con il primo pattern, proviamo un pattern alternativo
+            # Pattern alternativo per citazioni senza "Click to expand"
             if not quotes:
-                alt_pattern = r"(.*?) said:(.*?)$"
+                alt_pattern = r"([^:]+?) said:(.*?)(?=$|\n)"
                 alt_matches = re.finditer(alt_pattern, content, re.DOTALL | re.MULTILINE)
                 
                 for match in alt_matches:
