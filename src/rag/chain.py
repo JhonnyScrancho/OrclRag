@@ -8,45 +8,63 @@ import logging
 logger = logging.getLogger(__name__)
 
 def setup_rag_chain(retriever):
-    """Configura una chain RAG più diretta e precisa."""
+    """Configura una chain RAG semplificata che sfrutta le capacità di comprensione del LLM."""
     llm = ChatOpenAI(
         model_name="gpt-4-turbo-preview",
-        temperature=0.3,  # Ridotta per risposte più precise
+        temperature=0.3,
         api_key=st.secrets["OPENAI_API_KEY"]
     )
     
-    template = """Sei un assistente diretto e preciso. Rispondi alle domande in modo conciso utilizzando i dati forniti.
-
-REGOLE:
-1. Rispondi SOLO a ciò che viene chiesto
-2. Sii breve e diretto
-3. Per domande numeriche, dai prima il numero e poi solo insight essenziali
-4. Se rilevi citazioni, indicale esplicitamente
-5. Non fare analisi non richieste
+    template = """Sei un assistente esperto nell'analisi di conversazioni dei forum. Hai accesso ai dati di un thread del forum.
+Nel rispondere, presta particolare attenzione a:
+1. Identificare e utilizzare le citazioni presenti (formato "utente said: contenuto")
+2. Comprendere il flusso della conversazione e chi risponde a chi
+3. Interpretare correttamente il contesto temporale dei post
+4. Evidenziare le citazioni rilevanti quando rispondi
 
 Dati del forum:
 {context}
 
 Domanda: {query}
 
-Fornisci una risposta concisa e pertinente in italiano."""
+Fornisci una risposta concisa e pertinente in italiano, citando le parti rilevanti della conversazione quando appropriato.
+Quando citi un post, usa il formato: "[Autore] ha scritto: '...'"""
     
     def get_response(query_input):
         try:
+            # Gestisci sia input stringa che dizionario
             query = query_input.get("query", "") if isinstance(query_input, dict) else query_input
-            docs = retriever.get_relevant_documents(query)
             
+            # Ottieni i documenti rilevanti
+            docs = retriever.get_all_documents()
             if not docs:
                 return {"result": "Non ho trovato dati sufficienti per rispondere."}
             
-            rich_analysis = docs[0].metadata.get("analysis", {})
-            if not rich_analysis:
-                return {"result": "Non ho accesso ai dati necessari."}
+            # Prepara il contesto come una sequenza temporale di post
+            posts_context = []
+            for doc in docs:
+                post = {
+                    "author": doc.metadata.get("author", "Unknown"),
+                    "time": doc.metadata.get("post_time", "Unknown"),
+                    "content": doc.metadata.get("text", ""),
+                    "thread_title": doc.metadata.get("thread_title", "Unknown Thread")
+                }
+                posts_context.append(post)
             
-            context = json.dumps(rich_analysis, indent=2, ensure_ascii=False)
+            # Ordina i post per timestamp
+            posts_context.sort(key=lambda x: x["time"])
+            
+            # Aggiungi il titolo del thread al contesto
+            thread_title = posts_context[0]["thread_title"] if posts_context else "Unknown Thread"
+            
+            # Formatta il contesto come una conversazione
+            context = f"Thread: {thread_title}\n\n" + "\n\n".join([
+                f"[{post['time']}] {post['author']}:\n{post['content']}"
+                for post in posts_context
+            ])
             
             messages = [
-                SystemMessage(content="Sei un assistente preciso e conciso. Rispondi solo a ciò che viene chiesto."),
+                SystemMessage(content="Sei un assistente esperto nell'analisi di conversazioni dei forum."),
                 HumanMessage(content=template.format(context=context, query=query))
             ]
             
