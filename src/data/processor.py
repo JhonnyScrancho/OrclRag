@@ -1,11 +1,32 @@
-from typing import List, Dict, Tuple
+from typing import List, Dict
 from datetime import datetime
 import hashlib
+import re
 
 def generate_post_id(post: Dict, thread_id: str) -> str:
     """Genera un ID unico per ogni post basato sul suo contenuto e timestamp."""
     post_key = f"{thread_id}_{post['post_id']}_{post['post_time']}"
     return hashlib.md5(post_key.encode()).hexdigest()
+
+def extract_quote(content: str) -> tuple[str, str]:
+    """Estrae la citazione e il contenuto effettivo dal post."""
+    # Pattern per identificare le citazioni
+    quote_pattern = r"(.*?) said:(.*?)Click to expand\.\.\.(.*)"
+    match = re.search(quote_pattern, content)
+    
+    if match:
+        quoted_author = match.group(1).strip()
+        quoted_content = match.group(2).strip()
+        actual_content = match.group(3).strip()
+        
+        quote_info = {
+            "quoted_author": quoted_author,
+            "quoted_content": quoted_content
+        }
+        
+        return quote_info, actual_content
+    
+    return None, content
 
 def extract_post_content(post: Dict, thread_id: str) -> dict:
     """Estrae e formatta il contenuto di un post con metadati estesi."""
@@ -13,12 +34,25 @@ def extract_post_content(post: Dict, thread_id: str) -> dict:
         # Standardizza il timestamp
         post_time = datetime.strptime(post['post_time'], "%Y-%m-%dT%H:%M:%S%z").isoformat()
     except ValueError:
-        post_time = post['post_time']  # Mantieni il formato originale se il parsing fallisce
+        post_time = post['post_time']
     
+    # Estrai citazione e contenuto effettivo
+    quote_info, actual_content = extract_quote(post['content'])
+    
+    # Costruisci il testo formattato
     formatted_text = f"""
 Author: {post['author']}
 Time: {post_time}
-Content: {post['content']}
+"""
+    
+    if quote_info:
+        formatted_text += f"""
+Quoted Author: {quote_info['quoted_author']}
+Quoted Content: {quote_info['quoted_content']}
+"""
+    
+    formatted_text += f"""
+Content: {actual_content}
 Keywords: {', '.join(post['keywords'])}
 Sentiment: {post.get('sentiment', 0)}
 """
@@ -30,10 +64,14 @@ Sentiment: {post.get('sentiment', 0)}
         "post_time": post_time,
         "keywords": post['keywords'],
         "sentiment": post.get('sentiment', 0),
-        "content_length": len(post['content']),
+        "content_length": len(actual_content),
         "thread_id": thread_id,
-        "text": formatted_text  # Aggiungiamo il testo nei metadati
+        "text": formatted_text
     }
+    
+    if quote_info:
+        metadata["quoted_author"] = quote_info["quoted_author"]
+        metadata["quoted_content"] = quote_info["quoted_content"]
     
     # Aggiungi eventuali metadati aggiuntivi dal post originale
     if 'metadata' in post:
@@ -52,7 +90,8 @@ def process_thread(thread: Dict) -> List[str]:
         "thread_title": thread['title'],
         "url": thread['url'],
         "scrape_time": thread['scrape_time'],
-        "total_posts": len(thread['posts'])
+        "total_posts": len(thread['posts']),
+        "is_thread": True  # Flag per identificare che questo è un thread
     }
     
     # Aggiungi eventuali metadati aggiuntivi dal thread
@@ -63,7 +102,7 @@ def process_thread(thread: Dict) -> List[str]:
     for post in thread['posts']:
         metadata = extract_post_content(post, thread_id)
         metadata.update(thread_metadata)
-        # Aggiungi solo il testo formattato alla lista per il chunking
+        metadata["is_post"] = True  # Flag per identificare che questo è un post
         processed_posts.append(metadata["text"])
     
     return processed_posts
@@ -75,7 +114,6 @@ def get_thread_id(thread: Dict) -> str:
 
 def should_update_post(existing_post: Dict, new_post: Dict) -> bool:
     """Determina se un post esistente dovrebbe essere aggiornato."""
-    # Verifica se ci sono modifiche significative
     return (
         existing_post.get('content_length') != new_post.get('content_length') or
         existing_post.get('sentiment') != new_post.get('sentiment') or
@@ -92,8 +130,12 @@ async def update_thread_in_index(index, thread: Dict, embeddings):
         "thread_title": thread['title'],
         "url": thread['url'],
         "scrape_time": thread['scrape_time'],
-        "total_posts": len(thread['posts'])
+        "total_posts": len(thread['posts']),
+        "is_thread": True
     }
+    
+    if 'metadata' in thread:
+        thread_metadata.update(thread['metadata'])
     
     # Recupera i post esistenti per questo thread
     existing_posts = await index.query(
@@ -107,6 +149,7 @@ async def update_thread_in_index(index, thread: Dict, embeddings):
     for post in thread['posts']:
         metadata = extract_post_content(post, thread_id)
         metadata.update(thread_metadata)
+        metadata["is_post"] = True
         post_id = metadata['unique_post_id']
         
         if post_id not in existing_post_ids:
