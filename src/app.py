@@ -79,8 +79,7 @@ def process_and_index_thread(thread, embeddings, index):
                 "url": thread['url'],
                 "timestamp": thread['scrape_time']
             }
-            # Reinizializza Pinecone prima di ogni operazione di update
-            reinit_pinecone()
+            
             update_document_in_index(index, chunk_id, embedding, metadata)
     
     st.session_state.processed_threads.add(thread_id)
