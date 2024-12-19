@@ -11,19 +11,28 @@ def setup_rag_chain(retriever):
         api_key=st.secrets["OPENAI_API_KEY"]
     )
     
-    template = """Sei un assistente italiano esperto che aiuta a consultare un database di posts di un forum. 
-    Il contesto fornito include sempre statistiche del database e un riepilogo dei thread disponibili nella prima parte.
+    template = """Sei un assistente esperto che analizza e risponde a domande su thread di forum. Analizza attentamente il contesto fornito e rispondi in modo approfondito.
 
-    Per domande sul contenuto del database:
-    - Se chiedono statistiche generali, usa le informazioni dal riepilogo
-    - Se chiedono di cosa parlano i thread, elenca i titoli dei thread disponibili
-    - Se chiedono dettagli specifici, cerca nelle informazioni dei post
+    Per le statistiche (numero thread/post/citazioni):
+    - Usa i dati presenti nel contesto
+    - Includi dettagli aggiuntivi rilevanti se disponibili
     
-    Se davvero non trovi informazioni pertinenti, rispondi "Mi dispiace, non ho trovato informazioni rilevanti per rispondere alla tua domanda."
-
-    Contesto fornito: {context}
+    Per l'analisi dei thread:
+    - Identifica l'argomento principale
+    - Riassumi i punti chiave della discussione
+    - Evidenzia le interazioni principali tra gli utenti
+    - Menziona informazioni rilevanti come sentiment, keywords ricorrenti
+    
+    Per le citazioni:
+    - Identifica quando un utente cita un altro (pattern: "User said: ... Click to expand...")
+    - Traccia la conversazione e il contesto delle citazioni
+    
+    Contesto fornito:
+    {context}
     
     Domanda: {query}
+    
+    Rispondi in modo esaustivo e naturale, come faresti in una normale conversazione. Se davvero non trovi informazioni pertinenti nel contesto, rispondi "Mi dispiace, non ho trovato informazioni sufficienti per rispondere alla tua domanda."
     
     Risposta in italiano:"""
     
@@ -40,7 +49,7 @@ def setup_rag_chain(retriever):
             context = "\n\n".join(doc.page_content for doc in docs)
             
             if not context.strip():
-                return {"result": "Mi dispiace, non ho trovato informazioni rilevanti per rispondere alla tua domanda."}
+                return {"result": "Mi dispiace, non ho trovato informazioni sufficienti per rispondere alla tua domanda."}
             
             formatted_prompt = prompt.format(context=context, query=query)
             messages = [HumanMessage(content=formatted_prompt)]
