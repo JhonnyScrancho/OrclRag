@@ -95,9 +95,14 @@ def main():
         pc = Pinecone(api_key=st.secrets["PINECONE_API_KEY"])
         
         # Lista degli indici disponibili
-        indexes = pc.list_indexes().names()
+        indexes = pc.list_indexes()
         st.write("Available indexes:", indexes)
         
+        # Verifica se l'indice esiste
+        if INDEX_NAME not in indexes:
+            st.error(f"L'indice {INDEX_NAME} non esiste. Indici disponibili: {indexes}")
+            raise ValueError(f"Index {INDEX_NAME} not found")
+            
         # Ottieni l'indice
         index = pc.Index(INDEX_NAME)
         embeddings = get_embeddings()

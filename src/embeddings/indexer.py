@@ -17,7 +17,7 @@ def ensure_index_exists(pinecone_client):
         pc = Pinecone(api_key=st.secrets["PINECONE_API_KEY"])
         
         # Get list of existing indexes
-        existing_indexes = pc.list_indexes().names()
+        existing_indexes = pc.list_indexes()
         
         if INDEX_NAME not in existing_indexes:
             available_indexes = ', '.join(existing_indexes) if existing_indexes else 'nessuno'
@@ -29,6 +29,16 @@ def ensure_index_exists(pinecone_client):
         index = pc.Index(INDEX_NAME)
         st.success(f"Connesso con successo all'indice: {INDEX_NAME}")
         return index
+        
+    except Exception as e:
+        error_msg = f"""
+        Errore durante la connessione a Pinecone: {str(e)}
+        - API Key length: {len(st.secrets['PINECONE_API_KEY'])}
+        - Indice richiesto: {INDEX_NAME}
+        """
+        logger.error(error_msg)
+        st.error(error_msg)
+        raise
         
     except Exception as e:
         error_msg = f"""
