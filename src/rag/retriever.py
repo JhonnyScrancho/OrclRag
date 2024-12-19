@@ -1,84 +1,128 @@
 import streamlit as st
-from typing import List
+from typing import List, Dict
 from langchain_core.documents import Document
 from collections import defaultdict
 
 class PineconeRetriever:
-    def __init__(self, index, embeddings, top_k=10):  # Aumentato top_k a 10
+    def __init__(self, index, embeddings):
         self.index = index
         self.embeddings = embeddings
-        self.top_k = top_k
+        self._metadata_cache = None
     
-    def get_total_documents(self):
+    def _fetch_all_metadata(self):
+        """Fetch and cache all metadata from the index."""
         try:
-            stats = self.index.describe_index_stats()
-            return stats.total_vector_count
-        except Exception as e:
-            st.error(f"Errore nel recupero statistiche: {str(e)}")
-            return 0
-    
-    def get_threads_summary(self):
-        """Create a summary of all threads in the database."""
-        try:
-            # Query with a zero vector to get all documents
             results = self.index.query(
-                vector=[0] * 1536,  # dimensione standard per OpenAI embeddings
-                top_k=1000,  # numero alto per prendere tutti i documenti
+                vector=[0] * 1536,
+                top_k=10000,  # Get all documents
                 include_metadata=True
             )
-            
-            # Raggruppa per thread_id
-            threads = defaultdict(dict)
-            for match in results.matches:
-                thread_id = match.metadata.get('thread_id')
-                if thread_id:
-                    threads[thread_id].update({
-                        'title': match.metadata.get('thread_title', 'Titolo non disponibile'),
-                        'url': match.metadata.get('url', 'URL non disponibile')
-                    })
-            
-            # Crea il sommario
-            summary = "Riepilogo dei thread nel database:\n\n"
-            for thread_info in threads.values():
-                summary += f"- {thread_info['title']}\n"
-            
-            return summary
-            
+            return results.matches
         except Exception as e:
-            st.error(f"Errore nel recupero sommario: {str(e)}")
-            return "Non è stato possibile recuperare il sommario dei thread."
+            st.error(f"Error fetching metadata: {str(e)}")
+            return []
+    
+    def get_database_stats(self):
+        """Get comprehensive database statistics."""
+        matches = self._fetch_all_metadata()
+        
+        # Aggregate statistics
+        stats = {
+            'total_posts': len(matches),
+            'unique_threads': set(),
+            'unique_authors': set(),
+            'posts_by_thread': defaultdict(int),
+            'posts_by_author': defaultdict(int),
+            'keywords_frequency': defaultdict(int),
+            'earliest_post': None,
+            'latest_post': None,
+            'threads_details': []
+        }
+        
+        for match in matches:
+            metadata = match.metadata
+            thread_id = metadata.get('thread_id')
+            thread_title = metadata.get('thread_title')
+            author = metadata.get('author')
+            post_time = metadata.get('post_time')
+            keywords = metadata.get('keywords', [])
+            
+            # Update aggregations
+            if thread_id and thread_title:
+                stats['unique_threads'].add((thread_id, thread_title))
+                stats['posts_by_thread'][thread_title] += 1
+            
+            if author:
+                stats['unique_authors'].add(author)
+                stats['posts_by_author'][author] += 1
+            
+            for keyword in keywords:
+                stats['keywords_frequency'][keyword] += 1
+            
+            # Track thread details
+            thread_info = {
+                'title': thread_title,
+                'url': metadata.get('url'),
+                'total_posts': stats['posts_by_thread'][thread_title],
+                'unique_authors': set([author]),
+                'keywords': set(keywords)
+            }
+            
+            if thread_info not in stats['threads_details']:
+                stats['threads_details'].append(thread_info)
+        
+        return stats
     
     def get_relevant_documents(self, query: str) -> List[Document]:
+        """Get relevant documents based on query type."""
         try:
-            # Add database stats and thread summary for overview queries
-            stats_doc = Document(
-                page_content=f"Il database contiene {self.get_total_documents()} posts totali.\n\n{self.get_threads_summary()}",
-                metadata={"type": "stats"}
-            )
+            # If query is about database statistics/content
+            if any(keyword in query.lower() for keyword in ['quanti', 'numero', 'cosa parlano', 'argomenti', 'temi', 'statistic']):
+                stats = self.get_database_stats()
+                
+                # Create comprehensive analysis document
+                analysis = f"""Analisi completa del database:
+
+Statistiche Generali:
+- Totale posts: {stats['total_posts']}
+- Thread unici: {len(stats['unique_threads'])}
+- Autori unici: {len(stats['unique_authors'])}
+
+Threads principali:
+"""
+                
+                for thread in stats['threads_details']:
+                    analysis += f"""
+• {thread['title']}
+  - Posts totali: {thread['total_posts']}
+  - Autori unici: {len(thread['unique_authors'])}
+  - Keywords principali: {', '.join(list(thread['keywords'])[:5])}
+"""
+                
+                # Add keyword analysis
+                top_keywords = sorted(stats['keywords_frequency'].items(), key=lambda x: x[1], reverse=True)[:10]
+                analysis += "\nKeywords più frequenti:\n"
+                for keyword, freq in top_keywords:
+                    analysis += f"- {keyword}: {freq} occorrenze\n"
+                
+                return [Document(page_content=analysis, metadata={"type": "analysis"})]
             
-            # Get query embedding
+            # For specific queries, use vector search
             query_embedding = self.embeddings.embed_query(query)
-            
-            # Query the index
             results = self.index.query(
                 vector=query_embedding,
-                top_k=self.top_k,
+                top_k=5,
                 include_metadata=True
             )
             
-            # Create regular documents
-            documents = [stats_doc]  # Add stats as first document
-            for result in results.matches:
-                if result.metadata.get("text"):
-                    documents.append(
-                        Document(
-                            page_content=result.metadata.get("text", ""),
-                            metadata=result.metadata
-                        )
-                    )
-            
-            return documents
+            return [
+                Document(
+                    page_content=result.metadata.get("text", ""),
+                    metadata=result.metadata
+                )
+                for result in results.matches
+            ]
             
         except Exception as e:
-            st.error(f"Errore nella ricerca documenti: {str(e)}")
+            st.error(f"Error in retrieval: {str(e)}")
             return []
