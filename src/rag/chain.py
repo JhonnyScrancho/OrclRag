@@ -5,18 +5,21 @@ from langchain_core.prompts import PromptTemplate
 from config import LLM_MODEL
 
 def setup_rag_chain(retriever):
-    """Configure the RAG chain."""
     llm = ChatOpenAI(
         model_name=LLM_MODEL,
         temperature=0,
         api_key=st.secrets["OPENAI_API_KEY"]
     )
     
-    template = """Sei un assistente italiano esperto che aiuta a consultare un database di posts. Il contesto fornito include sempre informazioni sulle statistiche del database nella prima riga.
+    template = """Sei un assistente italiano esperto che aiuta a consultare un database di posts di un forum. 
+    Il contesto fornito include sempre statistiche del database e un riepilogo dei thread disponibili nella prima parte.
 
-    Se la domanda riguarda il numero di posts o statistiche del database, usa quelle informazioni per rispondere.
-    Se la domanda riguarda il contenuto specifico dei posts, usa le informazioni fornite nel contesto.
-    Se non trovi informazioni pertinenti, rispondi "Mi dispiace, non ho trovato informazioni rilevanti per rispondere alla tua domanda."
+    Per domande sul contenuto del database:
+    - Se chiedono statistiche generali, usa le informazioni dal riepilogo
+    - Se chiedono di cosa parlano i thread, elenca i titoli dei thread disponibili
+    - Se chiedono dettagli specifici, cerca nelle informazioni dei post
+    
+    Se davvero non trovi informazioni pertinenti, rispondi "Mi dispiace, non ho trovato informazioni rilevanti per rispondere alla tua domanda."
 
     Contesto fornito: {context}
     
