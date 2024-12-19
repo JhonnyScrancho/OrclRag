@@ -10,8 +10,8 @@ logger = logging.getLogger(__name__)
 def setup_rag_chain(retriever):
     """Configura e restituisce una chain RAG avanzata."""
     llm = ChatOpenAI(
-        model_name="gpt-4-turbo-preview",  # Usiamo GPT-4 per migliore comprensione
-        temperature=0.7,  # Più creatività nelle risposte
+        model_name="gpt-4-turbo-preview",
+        temperature=0.7,
         api_key=st.secrets["OPENAI_API_KEY"]
     )
     
@@ -62,16 +62,14 @@ Se la domanda è specifica (es. numero di post), fornisci prima la risposta dire
             
             if not docs:
                 return {
-                    "result": "Mi dispiace, non ho trovato dati sufficienti per rispondere alla tua domanda.",
-                    "error": True
+                    "result": "Mi dispiace, non ho trovato dati sufficienti per rispondere alla tua domanda."
                 }
             
             # Estrai l'analisi ricca dal metadata
             rich_analysis = docs[0].metadata.get("analysis", {})
             if not rich_analysis:
                 return {
-                    "result": "Non sono riuscito a recuperare un'analisi dettagliata dei dati.",
-                    "error": True
+                    "result": "Non sono riuscito a recuperare un'analisi dettagliata dei dati."
                 }
             
             # Formatta il contesto in modo naturale
@@ -87,16 +85,13 @@ Usa la tua conoscenza per identificare pattern interessanti e connessioni non ov
             response = llm.invoke(messages)
             
             return {
-                "result": response.content,
-                "error": False,
-                "analysis": rich_analysis  # Include l'analisi completa per riferimento
+                "result": response.content
             }
             
         except Exception as e:
             logger.error(f"Error in RAG chain: {str(e)}", exc_info=True)
             return {
-                "result": f"Si è verificato un errore durante l'elaborazione della risposta: {str(e)}",
-                "error": True
+                "result": f"Si è verificato un errore durante l'elaborazione della risposta: {str(e)}"
             }
     
     return get_response
