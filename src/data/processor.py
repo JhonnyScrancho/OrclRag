@@ -1,4 +1,4 @@
-from typing import List, Dict
+from typing import List, Dict, Tuple
 from datetime import datetime
 import hashlib
 
@@ -31,22 +31,20 @@ Sentiment: {post.get('sentiment', 0)}
         "keywords": post['keywords'],
         "sentiment": post.get('sentiment', 0),
         "content_length": len(post['content']),
-        "thread_id": thread_id
+        "thread_id": thread_id,
+        "text": formatted_text  # Aggiungiamo il testo nei metadati
     }
     
     # Aggiungi eventuali metadati aggiuntivi dal post originale
     if 'metadata' in post:
         metadata.update(post['metadata'])
     
-    return {
-        "text": formatted_text,
-        "metadata": metadata
-    }
+    return metadata
 
-def process_thread(thread: Dict) -> List[dict]:
-    """Processa un thread e restituisce una lista di contenuti formattati con metadati."""
-    processed_posts = []
+def process_thread(thread: Dict) -> List[str]:
+    """Processa un thread e restituisce una lista di testi per il chunking."""
     thread_id = get_thread_id(thread)
+    processed_posts = []
     
     # Metadati comuni del thread
     thread_metadata = {
@@ -63,10 +61,10 @@ def process_thread(thread: Dict) -> List[dict]:
     
     # Processa ogni post
     for post in thread['posts']:
-        processed_post = extract_post_content(post, thread_id)
-        # Aggiungi i metadati del thread
-        processed_post['metadata'].update(thread_metadata)
-        processed_posts.append(processed_post)
+        metadata = extract_post_content(post, thread_id)
+        metadata.update(thread_metadata)
+        # Aggiungi solo il testo formattato alla lista per il chunking
+        processed_posts.append(metadata["text"])
     
     return processed_posts
 
@@ -86,8 +84,16 @@ def should_update_post(existing_post: Dict, new_post: Dict) -> bool:
 
 async def update_thread_in_index(index, thread: Dict, embeddings):
     """Aggiorna un thread nell'indice, gestendo i duplicati e gli aggiornamenti."""
-    processed_posts = process_thread(thread)
     thread_id = get_thread_id(thread)
+    
+    # Metadati comuni del thread
+    thread_metadata = {
+        "thread_id": thread_id,
+        "thread_title": thread['title'],
+        "url": thread['url'],
+        "scrape_time": thread['scrape_time'],
+        "total_posts": len(thread['posts'])
+    }
     
     # Recupera i post esistenti per questo thread
     existing_posts = await index.query(
@@ -97,30 +103,33 @@ async def update_thread_in_index(index, thread: Dict, embeddings):
     
     existing_post_ids = {post.metadata.get('unique_post_id'): post for post in existing_posts.matches}
     
-    for processed_post in processed_posts:
-        post_id = processed_post['metadata']['unique_post_id']
+    # Processa ogni post
+    for post in thread['posts']:
+        metadata = extract_post_content(post, thread_id)
+        metadata.update(thread_metadata)
+        post_id = metadata['unique_post_id']
         
         if post_id not in existing_post_ids:
             # Nuovo post - aggiungi all'indice
-            embedding = embeddings.embed_query(processed_post['text'])
+            embedding = embeddings.embed_query(metadata['text'])
             await index.upsert(
                 vectors=[{
                     "id": post_id,
                     "values": embedding,
-                    "metadata": processed_post['metadata']
+                    "metadata": metadata
                 }]
             )
         else:
             # Post esistente - verifica se necessita aggiornamento
             existing_post = existing_post_ids[post_id]
-            if should_update_post(existing_post.metadata, processed_post['metadata']):
-                embedding = embeddings.embed_query(processed_post['text'])
+            if should_update_post(existing_post.metadata, metadata):
+                embedding = embeddings.embed_query(metadata['text'])
                 await index.upsert(
                     vectors=[{
                         "id": post_id,
                         "values": embedding,
-                        "metadata": processed_post['metadata']
+                        "metadata": metadata
                     }]
                 )
 
-    return len(processed_posts)
+    return len(thread['posts'])
