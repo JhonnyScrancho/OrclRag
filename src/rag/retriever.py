@@ -1,3 +1,4 @@
+import re
 import streamlit as st
 from typing import List, Dict, Any, Optional
 from langchain_core.documents import Document
@@ -29,21 +30,37 @@ class SmartRetriever:
             return []
 
     def extract_quotes(self, content: str) -> List[Dict]:
-        """Estrae le citazioni dal contenuto."""
+        """Estrae le citazioni dal contenuto con migliore rilevamento."""
         quotes = []
-        if isinstance(content, str):  # Verifica che content sia una stringa
-            segments = content.split('Click to expand...')
-            for segment in segments[:-1]:  # Ignora l'ultimo segmento
-                if ' said:' in segment:
-                    parts = segment.rsplit(' said:', 1)  # Usa rsplit per gestire nomi con "said"
-                    if len(parts) == 2:
-                        author = parts[0].strip()
-                        quoted_content = parts[1].strip()
-                        quotes.append({
-                            'author': author,
-                            'content': quoted_content,
-                            'timestamp': datetime.now().isoformat()
-                        })
+        if isinstance(content, str):
+            # Pattern più preciso per il rilevamento delle citazioni
+            pattern = r"(.*?) said:(.*?)Click to expand..."
+            matches = re.finditer(pattern, content, re.DOTALL)
+            
+            for match in matches:
+                author = match.group(1).strip()
+                quoted_content = match.group(2).strip()
+                quotes.append({
+                    'author': author,
+                    'content': quoted_content,
+                    'timestamp': datetime.now().isoformat()
+                })
+                
+            # Gestione citazioni nidificate
+            if ">" in content:
+                quote_blocks = content.split(">")
+                for block in quote_blocks[1:]:  # Salta il primo che non è una citazione
+                    if ":" in block:
+                        parts = block.split(":", 1)
+                        if len(parts) == 2:
+                            author = parts[0].strip()
+                            quoted_content = parts[1].split("\n")[0].strip()
+                            quotes.append({
+                                'author': author,
+                                'content': quoted_content,
+                                'timestamp': datetime.now().isoformat()
+                            })
+        
         return quotes
 
     def process_content(self, content: str) -> Dict:

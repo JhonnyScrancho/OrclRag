@@ -8,90 +8,53 @@ import logging
 logger = logging.getLogger(__name__)
 
 def setup_rag_chain(retriever):
-    """Configura e restituisce una chain RAG avanzata."""
+    """Configura una chain RAG più diretta e precisa."""
     llm = ChatOpenAI(
         model_name="gpt-4-turbo-preview",
-        temperature=0.7,
+        temperature=0.3,  # Ridotta per risposte più precise
         api_key=st.secrets["OPENAI_API_KEY"]
     )
     
-    template = """Sei un analista esperto di forum online con accesso a dati dettagliati sulle discussioni.
-Hai piena libertà di analizzare e interpretare i dati forniti nel modo più appropriato.
+    template = """Sei un assistente diretto e preciso. Rispondi alle domande in modo conciso utilizzando i dati forniti.
 
-LINEE GUIDA PER L'ANALISI:
+REGOLE:
+1. Rispondi SOLO a ciò che viene chiesto
+2. Sii breve e diretto
+3. Per domande numeriche, dai prima il numero e poi solo insight essenziali
+4. Se rilevi citazioni, indicale esplicitamente
+5. Non fare analisi non richieste
 
-1. CONTENUTO E CONTESTO
-- Analizza il significato e il contesto della discussione
-- Identifica i temi principali e secondari
-- Considera il tono e lo stile della conversazione
-
-2. METRICHE E TREND
-- Esamina i sentiment e la loro evoluzione
-- Analizza le keywords e la loro rilevanza
-- Valuta i pattern di interazione tra utenti
-
-3. DINAMICHE SOCIALI
-- Osserva i ruoli degli utenti nella discussione
-- Identifica leader e partecipanti chiave
-- Analizza la qualità e profondità delle interazioni
-
-4. INSIGHT SPECIFICI
-- Cerca pattern non ovvi
-- Identifica connessioni interessanti
-- Evidenzia aspetti unici o notevoli
-
-I dati completi della discussione sono strutturati come segue:
+Dati del forum:
 {context}
 
-Domanda dell'utente: {query}
+Domanda: {query}
 
-ISTRUZIONI PER LA RISPOSTA:
-1. Fornisci un'analisi approfondita e pertinente
-2. Usa dati concreti per supportare le tue osservazioni
-3. Evidenzia insight non ovvi quando rilevanti
-4. Mantieni un tono professionale ma accessibile
-5. Rispondi in italiano in modo naturale e discorsivo
-
-Se la domanda è specifica (es. numero di post), fornisci prima la risposta diretta e poi eventuali insight aggiuntivi se rilevanti."""
+Fornisci una risposta concisa e pertinente in italiano."""
     
     def get_response(query_input):
-        """Processa la query e genera una risposta."""
         try:
             query = query_input.get("query", "") if isinstance(query_input, dict) else query_input
             docs = retriever.get_relevant_documents(query)
             
             if not docs:
-                return {
-                    "result": "Mi dispiace, non ho trovato dati sufficienti per rispondere alla tua domanda."
-                }
+                return {"result": "Non ho trovato dati sufficienti per rispondere."}
             
-            # Estrai l'analisi ricca dal metadata
             rich_analysis = docs[0].metadata.get("analysis", {})
             if not rich_analysis:
-                return {
-                    "result": "Non sono riuscito a recuperare un'analisi dettagliata dei dati."
-                }
+                return {"result": "Non ho accesso ai dati necessari."}
             
-            # Formatta il contesto in modo naturale
             context = json.dumps(rich_analysis, indent=2, ensure_ascii=False)
             
             messages = [
-                SystemMessage(content="""Sei un analista esperto di forum online. 
-Il tuo obiettivo è fornire insight profondi e significativi, basati sui dati ma con un'interpretazione intelligente e naturale.
-Usa la tua conoscenza per identificare pattern interessanti e connessioni non ovvie."""),
+                SystemMessage(content="Sei un assistente preciso e conciso. Rispondi solo a ciò che viene chiesto."),
                 HumanMessage(content=template.format(context=context, query=query))
             ]
             
             response = llm.invoke(messages)
-            
-            return {
-                "result": response.content
-            }
+            return {"result": response.content}
             
         except Exception as e:
-            logger.error(f"Error in RAG chain: {str(e)}", exc_info=True)
-            return {
-                "result": f"Si è verificato un errore durante l'elaborazione della risposta: {str(e)}"
-            }
+            logger.error(f"Error in RAG chain: {str(e)}")
+            return {"result": f"Errore nell'elaborazione: {str(e)}"}
     
     return get_response
