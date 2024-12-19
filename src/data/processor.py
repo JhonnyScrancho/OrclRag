@@ -15,23 +15,32 @@ def extract_post_content(post: Dict, thread_id: str) -> dict:
     except ValueError:
         post_time = post['post_time']  # Mantieni il formato originale se il parsing fallisce
     
-    return {
-        "text": f"""
+    formatted_text = f"""
 Author: {post['author']}
 Time: {post_time}
 Content: {post['content']}
 Keywords: {', '.join(post['keywords'])}
-""",
-        "metadata": {
-            "post_id": post['post_id'],
-            "unique_post_id": generate_post_id(post, thread_id),
-            "author": post['author'],
-            "post_time": post_time,
-            "keywords": post['keywords'],
-            "sentiment": post.get('sentiment', 0),
-            "content_length": len(post['content']),
-            "thread_id": thread_id
-        }
+Sentiment: {post.get('sentiment', 0)}
+"""
+    
+    metadata = {
+        "post_id": post['post_id'],
+        "unique_post_id": generate_post_id(post, thread_id),
+        "author": post['author'],
+        "post_time": post_time,
+        "keywords": post['keywords'],
+        "sentiment": post.get('sentiment', 0),
+        "content_length": len(post['content']),
+        "thread_id": thread_id
+    }
+    
+    # Aggiungi eventuali metadati aggiuntivi dal post originale
+    if 'metadata' in post:
+        metadata.update(post['metadata'])
+    
+    return {
+        "text": formatted_text,
+        "metadata": metadata
     }
 
 def process_thread(thread: Dict) -> List[dict]:
@@ -47,6 +56,10 @@ def process_thread(thread: Dict) -> List[dict]:
         "scrape_time": thread['scrape_time'],
         "total_posts": len(thread['posts'])
     }
+    
+    # Aggiungi eventuali metadati aggiuntivi dal thread
+    if 'metadata' in thread:
+        thread_metadata.update(thread['metadata'])
     
     # Processa ogni post
     for post in thread['posts']:
