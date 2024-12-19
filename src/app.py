@@ -4,7 +4,7 @@ from data.loader import load_json
 from data.processor import process_thread
 from embeddings.generator import create_chunks, get_embeddings
 from embeddings.indexer import update_document_in_index
-from rag.retriever import PineconeRetriever
+from rag.retriever import SmartRetriever
 from rag.chain import setup_rag_chain
 import hashlib
 import time
