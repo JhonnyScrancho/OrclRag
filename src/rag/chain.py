@@ -11,52 +11,44 @@ def setup_rag_chain(retriever):
         api_key=st.secrets["OPENAI_API_KEY"]
     )
     
-    template = """Sei un assistente esperto che analizza e risponde a domande su thread di forum. Analizza attentamente il contesto fornito e rispondi in modo approfondito.
+    template = """Sei un assistente esperto nell'analisi di thread di forum. Analizza attentamente il contesto fornito e rispondi in modo dettagliato e naturale.
 
-    Per le statistiche (numero thread/post/citazioni):
-    - Usa i dati presenti nel contesto
-    - Includi dettagli aggiuntivi rilevanti se disponibili
-    
-    Per l'analisi dei thread:
-    - Identifica l'argomento principale
-    - Riassumi i punti chiave della discussione
-    - Evidenzia le interazioni principali tra gli utenti
-    - Menziona informazioni rilevanti come sentiment, keywords ricorrenti
-    
-    Per le citazioni:
-    - Identifica quando un utente cita un altro (pattern: "User said: ... Click to expand...")
-    - Traccia la conversazione e il contesto delle citazioni
-    
-    Contesto fornito:
-    {context}
-    
-    Domanda: {query}
-    
-    Rispondi in modo esaustivo e naturale, come faresti in una normale conversazione. Se davvero non trovi informazioni pertinenti nel contesto, rispondi "Mi dispiace, non ho trovato informazioni sufficienti per rispondere alla tua domanda."
-    
-    Risposta in italiano:"""
+Per le statistiche:
+- Fornisci i numeri precisi di thread e post
+- Aggiungi dettagli rilevanti sul contesto
+
+Per le citazioni:
+- Identifica le citazioni nel formato "User said: ... Click to expand..."
+- Spiega il contesto delle citazioni
+
+Per i riassunti:
+- Identifica il tema principale
+- Evidenzia i punti chiave della discussione
+- Descrivi le interazioni principali tra gli utenti
+- Includi dettagli su sentiment e argomenti ricorrenti
+
+Contesto fornito:
+{context}
+
+Domanda: {query}
+
+Rispondi in modo completo e naturale, come in una conversazione reale. Se non trovi le informazioni necessarie, spiega cosa manca."""
     
     prompt = PromptTemplate(template=template, input_variables=["context", "query"])
     
     def get_response(query_input):
         try:
-            if isinstance(query_input, dict):
-                query = query_input.get("query", "")
-            else:
-                query = query_input
-            
+            query = query_input.get("query", "") if isinstance(query_input, dict) else query_input
             docs = retriever.get_relevant_documents(query)
+            
+            if not docs:
+                return {"result": "Mi dispiace, non ho trovato informazioni sufficienti nel database per rispondere alla tua domanda."}
+            
             context = "\n\n".join(doc.page_content for doc in docs)
-            
-            if not context.strip():
-                return {"result": "Mi dispiace, non ho trovato informazioni sufficienti per rispondere alla tua domanda."}
-            
-            formatted_prompt = prompt.format(context=context, query=query)
-            messages = [HumanMessage(content=formatted_prompt)]
+            messages = [HumanMessage(content=prompt.format(context=context, query=query))]
             response = llm.invoke(messages)
             
-            result = response.content if hasattr(response, 'content') else str(response)
-            return {"result": result}
+            return {"result": response.content if hasattr(response, 'content') else str(response)}
             
         except Exception as e:
             st.error(f"Errore nella catena RAG: {str(e)}")
