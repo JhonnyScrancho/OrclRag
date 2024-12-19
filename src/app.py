@@ -150,9 +150,12 @@ def main():
         
         # Visualizza anteprima dati caricati
         if 'data' in st.session_state:
-            with st.expander("📊 Anteprima Dati Caricati"):
-                for thread in st.session_state['data']:
-                    display_thread_preview(thread)
+            st.header("📊 Anteprima Dati Caricati")
+            # Rimuoviamo l'expander esterno e usiamo una semplice divisione
+            st.divider()
+            for thread in st.session_state['data']:
+                display_thread_preview(thread)
+                st.divider()
         
         # Chat interface
         st.header("💬 Chat con l'Oracolo")
