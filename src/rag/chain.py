@@ -26,19 +26,24 @@ def setup_rag_chain(retriever):
         return "\n\n".join(doc.page_content for doc in docs)
     
     def get_response(query):
-        # Get relevant documents
-        docs = retriever.get_relevant_documents(query)
-        
-        # Format the context
-        context = format_docs(docs)
-        
-        # Generate prompt
-        formatted_prompt = prompt.format(context=context, query=query)
-        
-        # Get LLM response
-        response = llm.invoke(formatted_prompt)
-        
-        # Parse output
-        return StrOutputParser().invoke(response)
+        try:
+            # Get relevant documents
+            docs = retriever.get_relevant_documents(query)
+            
+            # Format the context
+            context = format_docs(docs)
+            
+            # Generate prompt
+            formatted_prompt = prompt.format(context=context, query=query)
+            
+            # Get LLM response
+            response = llm.invoke(formatted_prompt)
+            
+            # Extract the content from the message
+            return response.content
+            
+        except Exception as e:
+            st.error(f"Error in RAG chain: {str(e)}")
+            return "Mi dispiace, c'è stato un errore nell'elaborazione della risposta."
     
     return get_response
