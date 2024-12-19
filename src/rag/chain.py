@@ -1,8 +1,8 @@
-import streamlit as st
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage
 from langchain_core.prompts import PromptTemplate
 from config import LLM_MODEL
+import streamlit as st
 
 def setup_rag_chain(retriever):
     llm = ChatOpenAI(
@@ -11,28 +11,27 @@ def setup_rag_chain(retriever):
         api_key=st.secrets["OPENAI_API_KEY"]
     )
     
-    template = """Sei un assistente esperto nell'analisi di thread di forum. Analizza attentamente il contesto fornito e rispondi in modo dettagliato e naturale.
+    template = """Sei un assistente che analizza dati di forum. Fornisci risposte precise e concise, senza aggiungere informazioni non richieste.
 
-Per le statistiche:
-- Fornisci i numeri precisi di thread e post
-- Aggiungi dettagli rilevanti sul contesto
+Se la domanda riguarda statistiche (numero di thread/post):
+- Riporta solo i numeri esatti
+- Non aggiungere interpretazioni o analisi non richieste
 
-Per le citazioni:
-- Identifica le citazioni nel formato "User said: ... Click to expand..."
-- Spiega il contesto delle citazioni
+Se la domanda riguarda citazioni:
+- Riporta solo il numero di citazioni trovate
+- Se richiesto, elenca le citazioni specifiche
 
-Per i riassunti:
-- Identifica il tema principale
-- Evidenzia i punti chiave della discussione
-- Descrivi le interazioni principali tra gli utenti
-- Includi dettagli su sentiment e argomenti ricorrenti
+Se la domanda riguarda il contenuto/riassunto:
+- Descrivi l'argomento principale
+- Elenca i punti chiave della discussione
+- Mantieni il focus sul contenuto effettivo
 
 Contesto fornito:
 {context}
 
 Domanda: {query}
 
-Rispondi in modo completo e naturale, come in una conversazione reale. Se non trovi le informazioni necessarie, spiega cosa manca."""
+Rispondi in modo diretto e conciso in italiano."""
     
     prompt = PromptTemplate(template=template, input_variables=["context", "query"])
     
@@ -42,7 +41,7 @@ Rispondi in modo completo e naturale, come in una conversazione reale. Se non tr
             docs = retriever.get_relevant_documents(query)
             
             if not docs:
-                return {"result": "Mi dispiace, non ho trovato informazioni sufficienti nel database per rispondere alla tua domanda."}
+                return {"result": "Mi dispiace, non ho trovato informazioni sufficienti per rispondere alla tua domanda."}
             
             context = "\n\n".join(doc.page_content for doc in docs)
             messages = [HumanMessage(content=prompt.format(context=context, query=query))]
