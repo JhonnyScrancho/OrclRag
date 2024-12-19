@@ -12,13 +12,14 @@ def setup_rag_chain(retriever):
         api_key=st.secrets["OPENAI_API_KEY"]
     )
     
-    template = """Use the following information to answer the question. If you don't know the answer, simply say you don't know.
+    template = """Sei un assistente italiano esperto. Usa le seguenti informazioni per rispondere alla domanda in italiano. 
+    Se non trovi informazioni pertinenti nel contesto, rispondi "Mi dispiace, non ho trovato informazioni rilevanti per rispondere alla tua domanda."
 
-    Context: {context}
+    Contesto fornito: {context}
     
-    Question: {query}
+    Domanda: {query}
     
-    Answer:"""
+    Risposta in italiano:"""
     
     prompt = PromptTemplate(template=template, input_variables=["context", "query"])
     
@@ -30,17 +31,18 @@ def setup_rag_chain(retriever):
             else:
                 query = query_input
             
-            # Log the query
-            st.write("Debug - Query:", query)
-            
             # Get relevant documents
             docs = retriever.get_relevant_documents(query)
+            
+            # Log number of documents found
+            st.write(f"Debug - Documenti trovati: {len(docs)}")
             
             # Format the context
             context = "\n\n".join(doc.page_content for doc in docs)
             
-            # Log the context
-            st.write("Debug - Context length:", len(context))
+            # If no context found
+            if not context.strip():
+                return {"result": "Mi dispiace, non ho trovato informazioni rilevanti per rispondere alla tua domanda."}
             
             # Generate prompt
             formatted_prompt = prompt.format(context=context, query=query)
@@ -51,16 +53,12 @@ def setup_rag_chain(retriever):
             # Get LLM response
             response = llm.invoke(messages)
             
-            # Log the response
-            st.write("Debug - Response type:", type(response))
-            
             # Return the content
             result = response.content if hasattr(response, 'content') else str(response)
             return {"result": result}
             
         except Exception as e:
-            st.error(f"Error in RAG chain: {str(e)}")
-            st.write("Debug - Error details:", str(e))
+            st.error(f"Errore nella catena RAG: {str(e)}")
             return {"result": "Mi dispiace, c'è stato un errore nell'elaborazione della risposta."}
     
     return get_response
