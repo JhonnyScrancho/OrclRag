@@ -1,8 +1,9 @@
+import streamlit as st
 from langchain_openai import ChatOpenAI
 from langchain_core.runnables import RunnablePassthrough
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import PromptTemplate
-from src.config import LLM_MODEL
+from config import LLM_MODEL
 
 def setup_rag_chain(retriever):
     """Configura la catena RAG."""
