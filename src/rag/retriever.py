@@ -31,8 +31,7 @@ class SmartRetriever:
 
     def extract_quotes(self, post: Dict) -> List[Dict]:
         """
-        Estrae le citazioni dal contenuto di un post.
-        Ora gestisce correttamente tutte le varianti di citazione presenti nel contenuto.
+        Estrae le citazioni dal contenuto raw del post.
         """
         quotes = []
         content = post.get('content', '')
@@ -40,90 +39,75 @@ class SmartRetriever:
         if not isinstance(content, str):
             return quotes
 
-        # Pattern principale per le citazioni (cattura l'intera struttura)
-        pattern = r"([\w\s]+) said:(.*?)Click to expand\.\.\.(.*)"
-        matches = re.finditer(pattern, content, re.DOTALL)
+        # Pattern per rilevare le citazioni
+        pattern = r"([^:]+?) said:(.*?)Click to expand\.\.\."
+        matches = list(re.finditer(pattern, content, re.DOTALL))
         
+        # Elabora ogni citazione trovata
         for match in matches:
             quoted_author = match.group(1).strip()
             quoted_text = match.group(2).strip()
-            response_text = match.group(3).strip() if match.group(3) else ""
             
-            if quoted_author and quoted_text:
-                quotes.append({
-                    'quote_id': f"{post.get('post_id')}_{len(quotes)}",
+            if quoted_author and quoted_text:  # Verifica che entrambi i campi siano validi
+                quote = {
                     'quoted_author': quoted_author,
                     'quoted_text': quoted_text,
-                    'response_text': response_text,
                     'quoting_author': post.get('author'),
                     'post_time': post.get('post_time'),
-                    'post_id': post.get('post_id'),
                     'sentiment': post.get('sentiment', 0),
-                    'keywords': post.get('keywords', [])
-                })
-        
+                    'post_id': post.get('post_id', '')
+                }
+                quotes.append(quote)
+
         return quotes
 
-    def build_conversation_tree(self, posts: List[Dict]) -> Dict:
+    def process_thread_content(self, thread_posts: List[Dict]) -> Dict:
         """
-        Costruisce un albero della conversazione basato sulle citazioni.
+        Processa il contenuto del thread, organizzando post e citazioni.
         """
-        conversation_tree = {
-            'posts_by_id': {},
-            'citation_chains': [],
-            'author_interactions': defaultdict(list)
+        thread_data = {
+            'posts': [],
+            'quotes': [],
+            'total_quotes': 0,
+            'quote_network': defaultdict(list),
+            'authors': set()
         }
-
-        # Prima passata: organizza i post per ID e estrai le citazioni
-        for post in posts:
-            post_id = post.get('post_id')
+        
+        # Prima passata: elabora tutti i post
+        for post in thread_posts:
             quotes = self.extract_quotes(post)
-            
-            conversation_tree['posts_by_id'][post_id] = {
-                'post': post,
-                'quotes': quotes,
-                'replies': []
+            processed_post = {
+                'post_id': post.get('post_id', ''),
+                'author': post.get('author', ''),
+                'content': post.get('content', ''),
+                'post_time': post.get('post_time', ''),
+                'sentiment': post.get('sentiment', 0),
+                'keywords': post.get('keywords', []),
+                'quotes': quotes
             }
-
-            # Traccia le interazioni tra autori
+            
+            thread_data['posts'].append(processed_post)
+            thread_data['total_quotes'] += len(quotes)
+            thread_data['quotes'].extend(quotes)
+            thread_data['authors'].add(post.get('author', ''))
+            
+            # Aggiorna la rete di citazioni
             for quote in quotes:
-                conversation_tree['author_interactions'][post['author']].append({
-                    'interacts_with': quote['quoted_author'],
-                    'interaction_type': 'quote',
-                    'timestamp': post['post_time']
+                thread_data['quote_network'][quote['quoted_author']].append({
+                    'quoted_by': quote['quoting_author'],
+                    'post_time': quote['post_time'],
+                    'sentiment': quote['sentiment']
                 })
-
-        # Seconda passata: costruisci le catene di citazioni
-        for post_id, post_data in conversation_tree['posts_by_id'].items():
-            for quote in post_data['quotes']:
-                # Trova il post originale citato
-                for original_id, original_data in conversation_tree['posts_by_id'].items():
-                    original_post = original_data['post']
-                    if (original_post['author'] == quote['quoted_author'] and 
-                        quote['quoted_text'] in original_post['content']):
-                        # Aggiungi alla catena di citazioni
-                        conversation_tree['citation_chains'].append({
-                            'original_post_id': original_id,
-                            'quoting_post_id': post_id,
-                            'quote_data': quote
-                        })
-                        # Aggiungi alla lista di risposte del post originale
-                        original_data['replies'].append(post_id)
-
-        return conversation_tree
+        
+        return thread_data
 
     def get_thread_analysis(self, matches: List[Any]) -> Dict:
-        """Analizza in profondità il contenuto del thread."""
+        """Analizza il thread completo."""
         thread_data = defaultdict(lambda: {
             'posts': [],
-            'sentiment_trend': [],
-            'keywords_frequency': defaultdict(int),
-            'authors': set(),
-            'conversation_tree': None,
             'quotes_analysis': {
                 'total_quotes': 0,
-                'quotes_by_author': defaultdict(list),
-                'most_quoted_authors': defaultdict(int)
+                'quote_network': defaultdict(list)
             },
             'title': '',
             'url': '',
@@ -135,44 +119,33 @@ class SmartRetriever:
             metadata = match.metadata
             thread_id = metadata.get('thread_id', 'unknown')
             
-            # Costruisci il post con tutti i metadati necessari
+            # Costruisci il post dai dati raw
             post = {
-                'post_id': metadata.get('post_id', f"post_{len(thread_data[thread_id]['posts'])}"),
-                'author': metadata.get('author', 'Unknown'),
-                'content': metadata.get('text', ''),
-                'post_time': metadata.get('post_time', 'Unknown'),
+                'post_id': metadata.get('post_id', ''),
+                'author': metadata.get('author', ''),
+                'content': metadata.get('text', ''),  # Usa il contenuto raw
+                'post_time': metadata.get('post_time', ''),
                 'sentiment': metadata.get('sentiment', 0),
-                'keywords': metadata.get('keywords', []),
+                'keywords': metadata.get('keywords', [])
             }
             
             thread = thread_data[thread_id]
-            thread['posts'].append(post)
             
-            # Aggiorna metadati thread
+            # Aggiorna informazioni base del thread
             if not thread['title']:
-                thread['title'] = metadata.get('thread_title', 'Unknown Title')
-                thread['url'] = metadata.get('url', 'Unknown URL')
+                thread['title'] = metadata.get('thread_title', '')
+                thread['url'] = metadata.get('url', '')
                 thread['scrape_time'] = metadata.get('scrape_time', '')
             
-            # Aggiorna statistiche
-            thread['sentiment_trend'].append(post['sentiment'])
-            thread['authors'].add(post['author'])
-            
-            for kw in post['keywords']:
-                thread['keywords_frequency'][kw] += 1
-            
-        # Costruisci l'albero della conversazione per ogni thread
+            thread['posts'].append(post)
+        
+        # Processo ogni thread per estrarre e organizzare le citazioni
         for thread_id, thread in thread_data.items():
-            conversation_tree = self.build_conversation_tree(thread['posts'])
-            thread['conversation_tree'] = conversation_tree
-            
-            # Aggiorna analisi citazioni
-            for chain in conversation_tree['citation_chains']:
-                quote_data = chain['quote_data']
-                thread['quotes_analysis']['total_quotes'] += 1
-                thread['quotes_analysis']['quotes_by_author'][quote_data['quoting_author']].append(quote_data)
-                thread['quotes_analysis']['most_quoted_authors'][quote_data['quoted_author']] += 1
-            
+            thread_content = self.process_thread_content(thread['posts'])
+            thread['quotes_analysis']['total_quotes'] = thread_content['total_quotes']
+            thread['quotes_analysis']['quote_network'] = dict(thread_content['quote_network'])
+            thread['quotes_analysis']['quotes'] = thread_content['quotes']
+        
         return dict(thread_data)
 
     def get_relevant_documents(self, query: str) -> List[Document]:
@@ -184,6 +157,28 @@ class SmartRetriever:
             
             thread_analysis = self.get_thread_analysis(matches)
             
+            # Per query specifiche sulle citazioni
+            if any(word in query.lower() for word in ['citazioni', 'quote', 'citano']):
+                quotes_summary = {}
+                for thread_id, thread in thread_analysis.items():
+                    quotes_summary[thread_id] = {
+                        'total_quotes': thread['quotes_analysis']['total_quotes'],
+                        'quotes': [
+                            {
+                                'quoting_author': q['quoting_author'],
+                                'quoted_author': q['quoted_author'],
+                                'quoted_text': q['quoted_text'][:100] + '...' if len(q['quoted_text']) > 100 else q['quoted_text']
+                            }
+                            for q in thread['quotes_analysis'].get('quotes', [])
+                        ]
+                    }
+                
+                return [Document(
+                    page_content=json.dumps(quotes_summary, ensure_ascii=False, indent=2),
+                    metadata={'type': 'quotes_analysis', 'data': quotes_summary}
+                )]
+            
+            # Per altre query
             rich_context = {
                 "total_threads": len(thread_analysis),
                 "total_posts": sum(len(thread['posts']) for thread in thread_analysis.values()),
@@ -197,25 +192,7 @@ class SmartRetriever:
                     "url": analysis['url'],
                     "scrape_time": analysis['scrape_time'],
                     "total_posts": len(analysis['posts']),
-                    "unique_authors": len(analysis['authors']),
-                    "total_quotes": analysis['quotes_analysis']['total_quotes'],
-                    "conversation_tree": analysis['conversation_tree'],
-                    "sentiment_analysis": {
-                        "average": sum(analysis['sentiment_trend']) / len(analysis['sentiment_trend']) if analysis['sentiment_trend'] else 0,
-                        "trend": analysis['sentiment_trend']
-                    },
-                    "interaction_analysis": {
-                        "most_active_quoters": sorted(
-                            [(author, len(quotes)) for author, quotes in analysis['quotes_analysis']['quotes_by_author'].items()],
-                            key=lambda x: x[1],
-                            reverse=True
-                        ),
-                        "most_quoted": sorted(
-                            analysis['quotes_analysis']['most_quoted_authors'].items(),
-                            key=lambda x: x[1],
-                            reverse=True
-                        )
-                    },
+                    "quotes_analysis": analysis['quotes_analysis'],
                     "posts": analysis['posts']
                 }
                 rich_context["threads"].append(thread_context)
