@@ -127,7 +127,7 @@ def apply_custom_styles():
                 );
                 background-origin: border-box;
                 background-clip: content-box, border-box;
-                color: #333;
+                color: #333 !important;
                 transform: translateY(1px);
             }
             
