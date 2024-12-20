@@ -223,7 +223,7 @@ def display_chat_interface(index, embeddings):
             st.markdown(message["content"])
     
     # Chat input
-    if prompt := st.chat_input("Ask L'Oracolo..."):
+    if prompt := st.chat_input("Chiedi all'Oracolo..."):
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.markdown(prompt)
