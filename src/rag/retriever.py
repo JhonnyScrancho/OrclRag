@@ -1,8 +1,11 @@
+# retriever.py
 import streamlit as st
 from typing import List, Dict, Any
 from langchain_core.documents import Document
 import logging
 from datetime import datetime
+import numpy as np
+from config import EMBEDDING_DIMENSION
 
 logger = logging.getLogger(__name__)
 
@@ -15,8 +18,12 @@ class SmartRetriever:
     def get_all_documents(self) -> List[Any]:
         """Recupera tutti i documenti dall'indice."""
         try:
+            # Crea un vettore random normalizzato per la query
+            query_vector = np.random.rand(EMBEDDING_DIMENSION)
+            query_vector = query_vector / np.linalg.norm(query_vector)
+            
             results = self.index.query(
-                vector=[0] * 1536,  # Vector di zeri per recuperare tutti i documenti
+                vector=query_vector.tolist(),
                 top_k=self.MAX_DOCUMENTS,
                 include_metadata=True
             )
@@ -41,15 +48,24 @@ class SmartRetriever:
         return formatted
 
     def get_relevant_documents(self, query: str) -> List[Document]:
-        """Recupera documenti mantenendo il formato originale."""
+        """Recupera documenti rilevanti usando Sentence Transformers."""
         try:
-            matches = self.get_all_documents()
-            if not matches:
+            # Genera l'embedding della query
+            query_embedding = self.embeddings.embed_query(query)
+            
+            # Cerca i documenti più simili
+            results = self.index.query(
+                vector=query_embedding,
+                top_k=10,
+                include_metadata=True
+            )
+            
+            if not results.matches:
                 return [Document(page_content="Nessun documento trovato", metadata={"type": "error"})]
             
-            # Converti i match in Documents con metadati formattati
+            # Converti i match in Documents
             documents = []
-            for match in matches:
+            for match in results.matches:
                 metadata = self._format_metadata(match.metadata)
                 doc = Document(
                     page_content=metadata["text"],
@@ -57,7 +73,7 @@ class SmartRetriever:
                 )
                 documents.append(doc)
             
-            # Ordina i documenti per timestamp se possibile
+            # Ordina per timestamp
             try:
                 documents.sort(key=lambda x: datetime.strptime(
                     x.metadata["post_time"], 
@@ -74,8 +90,3 @@ class SmartRetriever:
                 page_content=f"Errore durante il recupero dei documenti: {str(e)}",
                 metadata={"type": "error"}
             )]
-
-    def query_with_limit(self, query: str, limit: int = 5) -> List[Document]:
-        """Versione limitata di get_relevant_documents per query specifiche."""
-        documents = self.get_relevant_documents(query)
-        return documents[:limit] if limit > 0 else documents
