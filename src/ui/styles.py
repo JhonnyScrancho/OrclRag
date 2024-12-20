@@ -20,6 +20,8 @@ def apply_custom_styles():
                 text-align: center;
                 font-size: 2em !important;
                 font-weight: bold !important;
+                padding: 0 !important;
+                margin: 0 !important;
             }
             
             img {
@@ -136,7 +138,7 @@ def render_sidebar():
             }
             
             .stButton button {
-                background-color: transparent;
+                background-color: transparent !important;
                 border: none;
                 text-align: left;
                 font-size: 1rem;
@@ -145,7 +147,7 @@ def render_sidebar():
             }
             
             .stButton button:hover {
-                background-color: rgba(255, 255, 255, 0.1);
+                background-color: rgba(255, 255, 255, 0.1) !important;
             }
             </style>
         """, unsafe_allow_html=True)
