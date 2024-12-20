@@ -208,7 +208,6 @@ def render_sidebar():
         
         # Titolo sotto il logo
         st.markdown('<h1 class="logo-title">L\'Oracolo</h1>', unsafe_allow_html=True)
-        st.title("Navigation")
         
         # Main navigation
         selected = st.radio(
