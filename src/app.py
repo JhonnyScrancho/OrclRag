@@ -93,30 +93,139 @@ def process_and_index_thread(thread, embeddings, index):
         st.error(f"Errore processamento thread: {str(e)}")
         return 0
 
+def render_database_cleanup(index):
+    """Render database cleanup interface with proper deletion handling"""
+    st.warning("⚠️ Danger Zone - Database Maintenance")
+    
+    # Verify delete permissions first
+    can_delete, message = verify_delete_permissions(index)
+    if not can_delete:
+        st.error(f"Insufficient permissions: {message}")
+        return
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        if st.button("🧹 Clean Duplicates"):
+            with st.spinner("Checking for duplicates..."):
+                try:
+                    # Get all documents
+                    docs = fetch_all_documents(index)
+                    if not docs:
+                        st.info("No documents found in the database")
+                        return
+                    
+                    # Create a map of content hashes to document IDs
+                    content_map = {}
+                    duplicates = []
+                    
+                    for doc in docs:
+                        # Create a unique key based on thread and post IDs
+                        content_key = f"{doc.metadata.get('thread_id')}_{doc.metadata.get('post_id')}"
+                        
+                        if content_key in content_map:
+                            duplicates.append(doc.id)
+                        else:
+                            content_map[content_key] = doc.id
+                    
+                    if duplicates:
+                        # Delete duplicates in batches
+                        batch_size = 100
+                        progress_bar = st.progress(0)
+                        
+                        for i in range(0, len(duplicates), batch_size):
+                            batch = duplicates[i:i + batch_size]
+                            index._index.delete(ids=batch)
+                            progress = min(1.0, (i + batch_size) / len(duplicates))
+                            progress_bar.progress(progress)
+                        
+                        st.success(f"Removed {len(duplicates)} duplicate documents")
+                        time.sleep(1)  # Allow time for deletion to propagate
+                        st.rerun()
+                    else:
+                        st.info("No duplicates found")
+                        
+                except Exception as e:
+                    st.error(f"Error cleaning duplicates: {str(e)}")
+    
+    with col2:
+        if st.button("🗑️ Clear Database", type="secondary"):
+            # Add a text input for confirmation
+            confirm_text = st.text_input(
+                "Type 'DELETE' to confirm database clearing",
+                key="confirm_delete"
+            )
+            
+            if confirm_text == "DELETE":
+                try:
+                    with st.spinner("Deleting all records..."):
+                        # Get all document IDs
+                        docs = fetch_all_documents(index)
+                        if not docs:
+                            st.info("Database is already empty")
+                            return
+                            
+                        all_ids = [doc.id for doc in docs]
+                        
+                        # Delete in batches to handle large datasets
+                        batch_size = 100
+                        total_deleted = 0
+                        
+                        progress_bar = st.progress(0)
+                        
+                        for i in range(0, len(all_ids), batch_size):
+                            batch = all_ids[i:i + batch_size]
+                            index._index.delete(ids=batch)
+                            total_deleted += len(batch)
+                            progress = min(1.0, total_deleted / len(all_ids))
+                            progress_bar.progress(progress)
+                        
+                        # Verify deletion
+                        time.sleep(1)  # Allow time for deletion to propagate
+                        remaining_docs = fetch_all_documents(index)
+                        if not remaining_docs:
+                            st.success("Database cleared successfully!")
+                            st.rerun()
+                        else:
+                            st.warning(f"Some records ({len(remaining_docs)}) could not be deleted. Please try again.")
+                            
+                except Exception as e:
+                    st.error(f"Error clearing database: {str(e)}")
+            elif confirm_text:
+                st.error("Please type 'DELETE' to confirm")
+
 def fetch_all_documents(index):
-    """Recupera tutti i documenti dall'indice."""
+    """Fetch all documents from index with proper error handling"""
     try:
         response = index.query(
             vector=[0] * 1536,
             top_k=10000,
             include_metadata=True
         )
-        return response.matches
+        return response.matches if response and hasattr(response, 'matches') else []
     except Exception as e:
-        st.error(f"Errore recupero documenti: {str(e)}")
+        st.error(f"Error fetching documents: {str(e)}")
         return []
 
+def integrate_database_cleanup(index):
+    """Integration point for the database cleanup functionality"""
+    tabs = st.tabs(["📊 Overview", "🧹 Maintenance"])
+    
+    with tabs[0]:
+        display_database_view(index)
+    
+    with tabs[1]:
+        render_database_cleanup(index)
+
 def verify_delete_permissions(index):
-    """
-    Verifica i permessi di eliminazione sull'indice
-    """
+    """Verify delete permissions on the index"""
     try:
-        # Tenta di eliminare un documento di test
+        # Attempt to delete a test document
         test_id = "test_permissions"
         test_vector = [0.0] * 1536
         
-        # Inserisce un vettore di test
-        index.upsert(
+        # Insert test vector
+        index._index.upsert(
             vectors=[{
                 "id": test_id,
                 "values": test_vector,
@@ -124,18 +233,18 @@ def verify_delete_permissions(index):
             }]
         )
         
-        # Prova ad eliminarlo
-        index.delete(ids=[test_id])
+        # Try to delete it
+        index._index.delete(ids=[test_id])
         
-        # Verifica l'eliminazione
-        verification = index.fetch(ids=[test_id])
-        if verification.vectors:
-            return False, "Permessi di eliminazione insufficienti"
+        # Verify deletion
+        verification = index._index.fetch(ids=[test_id])
+        if verification and verification.vectors:
+            return False, "Insufficient delete permissions"
             
-        return True, "Permessi di eliminazione OK"
+        return True, "Delete permissions verified"
         
     except Exception as e:
-        return False, f"Errore verifica permessi: {str(e)}"
+        return False, f"Error verifying permissions: {str(e)}"
 
 def display_chat_interface(index, embeddings):
     """Interfaccia chat."""
@@ -172,71 +281,77 @@ def display_chat_interface(index, embeddings):
             st.error(f"Errore generazione risposta: {str(e)}")
 
 def display_database_view(index):
-    """Gestione database."""
-    st.header("📊 Database")
+    """Visualizzazione e gestione del database."""
+    st.header("📊 Database Management")
     
-    # Statistiche
+    # Statistiche generali
     try:
         stats = index.describe_index_stats()
-        st.info(f"Documenti nel database: {stats['total_vector_count']}")
+        col1, col2 = st.columns(2)
+        with col1:
+            st.metric("Total Documents", stats['total_vector_count'])
+        with col2:
+            st.metric("Dimension", stats['dimension'])
     except Exception as e:
-        st.error(f"Errore recupero statistiche: {str(e)}")
-    
+        st.error(f"Error retrieving database stats: {str(e)}")
+        return
+
     # Gestione documenti
-    if st.button("Aggiorna lista"):
-        documents = fetch_all_documents(index)
-        if documents:
-            data = [{
-                'ID': doc.id,
-                'Thread': doc.metadata.get('thread_title', 'N/A'),
-                'URL': doc.metadata.get('url', 'N/A'),
-                'Data': doc.metadata.get('timestamp', 'N/A')
-            } for doc in documents]
-            
-            df = pd.DataFrame(data)
-            
-            # Filtri base
-            thread_filter = st.multiselect("Filtra per Thread", options=df['Thread'].unique())
-            if thread_filter:
-                df = df[df['Thread'].isin(thread_filter)]
-            
-            selected_rows = st.data_editor(
-                df,
-                hide_index=True,
-                use_container_width=True
-            )
-            
-            col1, col2 = st.columns(2)
-            
-            # Eliminazione selettiva
-            with col1:
-                if st.button("Elimina selezionati", key="delete_selected"):
-                    if selected_rows is not None and len(selected_rows) > 0:
-                        try:
-                            ids_to_delete = selected_rows['ID'].tolist()
-                            # Usa direttamente l'API Pinecone per eliminare
-                            index._index.delete(ids=ids_to_delete)
-                            st.success(f"Eliminati {len(ids_to_delete)} documenti")
-                            time.sleep(1)  # Piccola pausa per assicurarsi che l'operazione sia completata
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"Errore durante l'eliminazione: {str(e)}")
-            
-            # Eliminazione totale
-            with col2:
-                if st.button("🗑️ Elimina TUTTO", type="primary", key="delete_all"):
-                    confirmation = st.checkbox("⚠️ Conferma eliminazione TOTALE del database", key="confirm_delete")
-                    if confirmation:
-                        try:
-                            # Usa direttamente l'API Pinecone per eliminare tutto
-                            index._index.delete(delete_all=True)
-                            st.success("Database completamente svuotato!")
-                            time.sleep(1)  # Piccola pausa per assicurarsi che l'operazione sia completata
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"Errore durante l'eliminazione totale: {str(e)}")
-        else:
-            st.info("Nessun documento nel database")
+    if st.button("📥 Load Documents", use_container_width=True):
+        with st.spinner("Loading documents..."):
+            documents = fetch_all_documents(index)
+            if documents:
+                # Preparazione dati per il DataFrame
+                data = []
+                for doc in documents:
+                    data.append({
+                        'ID': doc.id,
+                        'Thread': doc.metadata.get('thread_title', 'N/A'),
+                        'Author': doc.metadata.get('author', 'N/A'),
+                        'Date': doc.metadata.get('post_time', 'N/A'),
+                        'URL': doc.metadata.get('url', 'N/A')
+                    })
+                
+                df = pd.DataFrame(data)
+                
+                # Filtri
+                st.subheader("🔍 Filters")
+                col1, col2 = st.columns(2)
+                with col1:
+                    thread_filter = st.multiselect(
+                        "Filter by Thread",
+                        options=sorted(df['Thread'].unique())
+                    )
+                with col2:
+                    author_filter = st.multiselect(
+                        "Filter by Author",
+                        options=sorted(df['Author'].unique())
+                    )
+                
+                # Applica filtri
+                if thread_filter:
+                    df = df[df['Thread'].isin(thread_filter)]
+                if author_filter:
+                    df = df[df['Author'].isin(author_filter)]
+                
+                # Visualizzazione dati
+                st.subheader("📋 Documents")
+                selected_rows = st.data_editor(
+                    df,
+                    hide_index=True,
+                    use_container_width=True,
+                    num_rows="dynamic"
+                )
+                
+                # Mostra metadati dettagliati per la riga selezionata
+                if selected_rows is not None and len(selected_rows) > 0:
+                    st.subheader("📝 Document Details")
+                    selected_doc = next(doc for doc in documents if doc.id == selected_rows.iloc[0]['ID'])
+                    if selected_doc:
+                        with st.expander("Metadata", expanded=True):
+                            st.json(selected_doc.metadata)
+            else:
+                st.info("No documents found in the database")
 
 def main():
     initialize_session_state()
@@ -290,7 +405,7 @@ def main():
                             """)
         
         with tab3:
-            display_database_view(index)
+            integrate_database_cleanup(index)
     
     except Exception as e:
         st.error(f"Errore applicazione: {str(e)}")
