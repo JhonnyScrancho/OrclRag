@@ -13,6 +13,7 @@ from datetime import datetime
 from pinecone import Pinecone
 import pandas as pd
 import logging
+import json
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -233,15 +234,13 @@ def render_sidebar():
                 process_uploaded_file(uploaded_file)
 
 def render_chat_interface(index, embeddings):
-    """Interfaccia chat pulita e semplificata"""
+    """Render chat interface"""
     st.header("💬 Chat")
     
-    # Visualizza i messaggi
     for msg in st.session_state.messages:
         with st.chat_message(msg["role"]):
             st.write(msg["content"])
     
-    # Input chat in fondo
     if prompt := st.chat_input("Chiedi all'Oracolo..."):
         handle_chat_input(prompt, index, embeddings)
 
@@ -309,46 +308,43 @@ def handle_chat_input(prompt: str, index, embeddings):
 
 def process_uploaded_file(uploaded_file):
     """Process and index uploaded JSON file"""
-    with st.spinner("Processing file..."):
-        data = load_json(uploaded_file)
-        if data:
-            progress = st.progress(0)
-            total_chunks = 0
-            
-            for i, thread in enumerate(data):
-                # Usa st.status per mostrare il thread corrente
-                with st.status(f"Processing: {thread['title']}", expanded=False) as status:
-                    try:
-                        # Process thread
-                        chunks = process_thread(thread)
-                        total_chunks += len(chunks)
-                        status.update(label=f"Processed: {thread['title']}", state="complete")
-                    except Exception as e:
-                        logger.error(f"Error processing thread {thread.get('title', 'Unknown')}: {str(e)}")
-                        status.update(label=f"Error: {thread['title']}", state="error")
-                        continue
-                    
-                # Aggiorna la barra di progresso
-                progress.progress((i + 1) / len(data))
-            
-            # Mostra il risultato finale
-            st.success(f"Processed {len(data)} threads and created {total_chunks} chunks")
-            st.session_state['data'] = data
-            return True
+    try:
+        with st.spinner("Processing file..."):
+            if uploaded_file is not None:
+                content = uploaded_file.read()
+                data = json.loads(content)
+                
+                if not isinstance(data, list):
+                    st.error("Invalid JSON format. Expected a list of threads.")
+                    return False
+                
+                progress = st.progress(0)
+                total_chunks = 0
+                
+                for i, thread in enumerate(data):
+                    with st.status(f"Processing: {thread.get('title', 'Unknown thread')}", expanded=False) as status:
+                        try:
+                            chunks = process_thread(thread)
+                            total_chunks += len(chunks)
+                            status.update(label=f"Processed: {thread.get('title', 'Unknown thread')}", state="complete")
+                        except Exception as e:
+                            logger.error(f"Error processing thread: {str(e)}")
+                            status.update(label=f"Error: {thread.get('title', 'Unknown thread')}", state="error")
+                            continue
+                        
+                        progress.progress((i + 1) / len(data))
+                
+                st.success(f"Processed {len(data)} threads and created {total_chunks} chunks")
+                st.session_state['data'] = data
+                return True
+    except json.JSONDecodeError:
+        st.error("Invalid JSON file")
+        return False
+    except Exception as e:
+        st.error(f"Error processing file: {str(e)}")
+        return False
+    
     return False
-    
-def validate_thread(thread):
-    """Validate thread structure before processing"""
-    required_fields = ['title', 'url', 'posts']
-    
-    if not all(field in thread for field in required_fields):
-        missing_fields = [field for field in required_fields if field not in thread]
-        raise ValueError(f"Missing required fields: {', '.join(missing_fields)}")
-    
-    if not isinstance(thread['posts'], list):
-        raise ValueError("'posts' must be a list")
-    
-    return True    
 
 def render_database_browser(index):
     """Render database content browser"""
@@ -416,19 +412,6 @@ def render_database_search(index):
                         """)
             except Exception as e:
                 st.error(f"Search error: {str(e)}")
-
-def generate_content_hash(metadata):
-    """Generate a unique hash based on post content and relevant metadata"""
-    hash_data = {
-        'thread_id': metadata.get('thread_id'),
-        'post_id': metadata.get('post_id'),
-        'author': metadata.get('author'),
-        'post_time': metadata.get('post_time'),
-        'text': metadata.get('text'),
-        'thread_title': metadata.get('thread_title')
-    }
-    hash_string = json.dumps(hash_data, sort_keys=True)
-    return hashlib.md5(hash_string.encode()).hexdigest()
 
 def analyze_duplicates(index):
     """Analyze and display duplicate content in the database"""
@@ -533,6 +516,19 @@ def analyze_duplicates(index):
     except Exception as e:
         st.error(f"Error analyzing duplicates: {str(e)}")
         raise
+
+def generate_content_hash(metadata):
+    """Generate a unique hash based on post content and relevant metadata"""
+    hash_data = {
+        'thread_id': metadata.get('thread_id'),
+        'post_id': metadata.get('post_id'),
+        'author': metadata.get('author'),
+        'post_time': metadata.get('post_time'),
+        'text': metadata.get('text'),
+        'thread_title': metadata.get('thread_title')
+    }
+    hash_string = json.dumps(hash_data, sort_keys=True)
+    return hashlib.md5(hash_string.encode()).hexdigest()
 
 def render_database_cleanup(index):
     """Render database cleanup interface"""
