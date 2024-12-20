@@ -152,7 +152,7 @@ def initialize_pinecone():
         pc = Pinecone(api_key=st.secrets["PINECONE_API_KEY"])
         
         # Check if index exists
-        existing_indexes = pc.list_indexes()
+        existing_indexes = [index.name for index in pc.list_indexes()]
         
         if INDEX_NAME not in existing_indexes:
             error_msg = f"Index {INDEX_NAME} does not exist. Available indexes: {', '.join(existing_indexes) if existing_indexes else 'none'}"
