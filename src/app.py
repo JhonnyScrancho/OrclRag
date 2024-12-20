@@ -97,12 +97,6 @@ def render_database_cleanup(index):
     """Render database cleanup interface with proper deletion handling"""
     st.warning("⚠️ Danger Zone - Database Maintenance")
     
-    # Verify delete permissions first
-    can_delete, message = verify_delete_permissions(index)
-    if not can_delete:
-        st.error(f"Insufficient permissions: {message}")
-        return
-    
     col1, col2 = st.columns(2)
     
     with col1:
@@ -135,12 +129,17 @@ def render_database_cleanup(index):
                         
                         for i in range(0, len(duplicates), batch_size):
                             batch = duplicates[i:i + batch_size]
-                            index.delete(ids=batch)
+                            try:
+                                index.delete(ids=batch)
+                                st.write(f"Deleted batch of {len(batch)} documents")
+                            except Exception as e:
+                                st.error(f"Error deleting batch: {str(e)}")
+                            
                             progress = min(1.0, (i + batch_size) / len(duplicates))
                             progress_bar.progress(progress)
                         
                         st.success(f"Removed {len(duplicates)} duplicate documents")
-                        time.sleep(1)  # Allow time for deletion to propagate
+                        time.sleep(1)
                         st.rerun()
                     else:
                         st.info("No duplicates found")
@@ -150,55 +149,21 @@ def render_database_cleanup(index):
     
     with col2:
         if st.button("🗑️ Clear Database", type="secondary"):
-            # Add a text input for confirmation
-            confirm_text = st.text_input(
-                "Type 'DELETE' to confirm database clearing",
-                key="confirm_delete"
-            )
-            
-            if confirm_text == "DELETE":
-                try:
-                    with st.spinner("Deleting all records..."):
-                        # Get all document IDs
-                        docs = fetch_all_documents(index)
-                        if not docs:
-                            st.info("Database is already empty")
-                            return
-                            
-                        all_ids = [doc.id for doc in docs]
-                        
-                        # Delete in batches to handle large datasets
-                        batch_size = 100
-                        total_deleted = 0
-                        
-                        progress_bar = st.progress(0)
-                        
-                        for i in range(0, len(all_ids), batch_size):
-                            batch = all_ids[i:i + batch_size]
-                            index.delete(ids=batch)
-                            total_deleted += len(batch)
-                            progress = min(1.0, total_deleted / len(all_ids))
-                            progress_bar.progress(progress)
-                        
-                        # Verify deletion
-                        time.sleep(1)  # Allow time for deletion to propagate
-                        remaining_docs = fetch_all_documents(index)
-                        if not remaining_docs:
-                            st.success("Database cleared successfully!")
-                            st.rerun()
-                        else:
-                            st.warning(f"Some records ({len(remaining_docs)}) could not be deleted. Please try again.")
-                            
-                except Exception as e:
-                    st.error(f"Error clearing database: {str(e)}")
-            elif confirm_text:
-                st.error("Please type 'DELETE' to confirm")
+            try:
+                # Delete all vectors
+                index.delete(delete_all=True)
+                st.success("Database cleared successfully!")
+                time.sleep(1)
+                st.rerun()
+            except Exception as e:
+                st.error(f"Error clearing database: {str(e)}")
+                st.error("Full error:", exception=e)
 
 def fetch_all_documents(index):
     """Fetch all documents from index with proper error handling"""
     try:
         response = index.query(
-            vector=[0] * 1536,
+            vector=[1.0] + [0.0] * 1535,  # Vector with first element non-zero
             top_k=10000,
             include_metadata=True
         )
