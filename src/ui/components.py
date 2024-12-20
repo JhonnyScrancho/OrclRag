@@ -1,4 +1,4 @@
-from src.rag.retriever import SmartRetriever
+from rag.retriever import SmartRetriever
 import streamlit as st
 import pandas as pd
 import json
