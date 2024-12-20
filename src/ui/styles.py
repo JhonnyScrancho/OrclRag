@@ -48,11 +48,9 @@ def apply_custom_styles():
             
             /* Chat container styles */
             .chat-container {
-                background-color: white;
                 border-radius: 10px;
                 padding: 1rem;
                 margin: 1rem 0;
-                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
             }
             
             /* File uploader styles */
