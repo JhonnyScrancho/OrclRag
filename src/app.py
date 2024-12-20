@@ -192,7 +192,8 @@ def initialize_session_state():
 def render_sidebar():
     """Enhanced sidebar with navigation and tools"""
     with st.sidebar:
-        st.image("src/img/logo.png", caption="L'Oracolo", use_column_width=True)
+        st.image("src/img/logo.png", use_column_width=True, output_format="PNG", clamp=True)
+        st.markdown('<p class="logo-title">L\'Oracolo</p>', unsafe_allow_html=True)
         st.title("Navigation")
         
         # Main navigation
@@ -221,7 +222,7 @@ def render_sidebar():
 
 def render_chat_interface(index, embeddings):
     """Interfaccia chat pulita e semplificata"""
-    st.header("💬 Chat con L'Oracolo")
+    st.header("💬 Chat")
     
     # Visualizza i messaggi
     for msg in st.session_state.messages:
