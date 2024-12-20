@@ -138,7 +138,6 @@ def render_sidebar():
             }
             
             .stButton button {
-                background-color: transparent !important;
                 border: none;
                 text-align: left;
                 font-size: 1rem;
@@ -147,7 +146,6 @@ def render_sidebar():
             }
             
             .stButton button:hover {
-                background-color: rgba(255, 255, 255, 0.1) !important;
             }
             </style>
         """, unsafe_allow_html=True)
