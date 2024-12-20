@@ -135,7 +135,7 @@ def render_database_cleanup(index):
                         
                         for i in range(0, len(duplicates), batch_size):
                             batch = duplicates[i:i + batch_size]
-                            index._index.delete(ids=batch)
+                            index.delete(ids=batch)
                             progress = min(1.0, (i + batch_size) / len(duplicates))
                             progress_bar.progress(progress)
                         
@@ -175,7 +175,7 @@ def render_database_cleanup(index):
                         
                         for i in range(0, len(all_ids), batch_size):
                             batch = all_ids[i:i + batch_size]
-                            index._index.delete(ids=batch)
+                            index.delete(ids=batch)
                             total_deleted += len(batch)
                             progress = min(1.0, total_deleted / len(all_ids))
                             progress_bar.progress(progress)
@@ -225,7 +225,7 @@ def verify_delete_permissions(index):
         test_vector = [0.0] * 1536
         
         # Insert test vector
-        index._index.upsert(
+        index.upsert(
             vectors=[{
                 "id": test_id,
                 "values": test_vector,
@@ -234,10 +234,10 @@ def verify_delete_permissions(index):
         )
         
         # Try to delete it
-        index._index.delete(ids=[test_id])
+        index.delete(ids=[test_id])
         
         # Verify deletion
-        verification = index._index.fetch(ids=[test_id])
+        verification = index.fetch(ids=[test_id])
         if verification and verification.vectors:
             return False, "Insufficient delete permissions"
             
