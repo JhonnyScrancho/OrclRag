@@ -36,8 +36,8 @@ st.markdown("""
     
     .logo-title {
         text-align: center;
-        font-size: 2em;
-        font-weight: bold;
+        font-size: 2em !important;
+        font-weight: bold !important;
     }
     
     /* Modern color scheme */
