@@ -29,6 +29,18 @@ st.set_page_config(
 # Custom CSS for enhanced UI
 st.markdown("""
 <style>
+    /* Logo and title styling */
+    img {
+        border-radius: 60% !important;
+    }
+    
+    .logo-title {
+        text-align: center;
+        font-size: 2em;
+        font-weight: bold;
+        margin: 1rem 0 2rem 0;
+    }
+    
     /* Modern color scheme */
     :root {
         --primary-color: #7C3AED;
@@ -192,8 +204,11 @@ def initialize_session_state():
 def render_sidebar():
     """Enhanced sidebar with navigation and tools"""
     with st.sidebar:
-        st.image("src/img/logo.png", use_column_width=True, output_format="PNG", clamp=True)
-        st.markdown('<p class="logo-title">L\'Oracolo</p>', unsafe_allow_html=True)
+        # Logo con bordo circolare
+        st.image("src/img/logo.png", use_column_width=True)
+        
+        # Titolo sotto il logo
+        st.markdown('<h1 class="logo-title">L\'Oracolo</h1>', unsafe_allow_html=True)
         st.title("Navigation")
         
         # Main navigation
