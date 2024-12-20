@@ -394,7 +394,7 @@ def render_database_search(index):
                 st.error(f"Search error: {str(e)}")
 
 def render_database_cleanup(index):
-    """Render database cleanup interface"""
+    """Render database cleanup interface with proper deletion handling"""
     st.warning("⚠️ Danger Zone")
     
     col1, col2 = st.columns(2)
@@ -402,33 +402,86 @@ def render_database_cleanup(index):
     with col1:
         if st.button("🧹 Clean Duplicates"):
             with st.spinner("Checking for duplicates..."):
-                # Implement duplicate detection and cleaning
-                st.info("Duplicate cleaning not implemented yet")
+                try:
+                    # Get all documents
+                    docs = fetch_all_documents(index)
+                    
+                    # Create a map of content hashes to document IDs
+                    content_map = {}
+                    duplicates = []
+                    
+                    for doc in docs:
+                        # Create a hash of the content and metadata
+                        content_key = f"{doc.metadata.get('thread_id')}_{doc.metadata.get('post_id')}"
+                        
+                        if content_key in content_map:
+                            duplicates.append(doc.id)
+                        else:
+                            content_map[content_key] = doc.id
+                    
+                    if duplicates:
+                        # Delete duplicates in batches
+                        batch_size = 100
+                        for i in range(0, len(duplicates), batch_size):
+                            batch = duplicates[i:i + batch_size]
+                            index.delete(ids=batch)
+                        
+                        st.success(f"Removed {len(duplicates)} duplicate documents")
+                    else:
+                        st.info("No duplicates found")
+                        
+                except Exception as e:
+                    st.error(f"Error cleaning duplicates: {str(e)}")
     
     with col2:
         if st.button("🗑️ Clear Database", type="secondary"):
-            confirm = st.checkbox(
-                "⚠️ I understand this will permanently delete ALL data",
-                key="confirm_clear"
+            # Add a text input for confirmation
+            confirm_text = st.text_input(
+                "Type 'DELETE' to confirm database clearing",
+                key="confirm_delete"
             )
-            if confirm:
+            
+            if confirm_text == "DELETE":
                 try:
-                    index.delete(delete_all=True)
-                    st.success("Database cleared successfully!")
-                    time.sleep(1)
-                    st.rerun()
+                    with st.spinner("Deleting all records..."):
+                        # Get all document IDs
+                        docs = fetch_all_documents(index)
+                        all_ids = [doc.id for doc in docs]
+                        
+                        # Delete in batches to handle large datasets
+                        batch_size = 100
+                        total_deleted = 0
+                        
+                        progress_bar = st.progress(0)
+                        
+                        for i in range(0, len(all_ids), batch_size):
+                            batch = all_ids[i:i + batch_size]
+                            index.delete(ids=batch)
+                            total_deleted += len(batch)
+                            progress = min(1.0, total_deleted / len(all_ids))
+                            progress_bar.progress(progress)
+                        
+                        # Verify deletion
+                        remaining_docs = fetch_all_documents(index)
+                        if not remaining_docs:
+                            st.success("Database cleared successfully!")
+                        else:
+                            st.warning(f"Some records ({len(remaining_docs)}) could not be deleted. Please try again.")
+                            
                 except Exception as e:
                     st.error(f"Error clearing database: {str(e)}")
+            elif confirm_text:
+                st.error("Please type 'DELETE' to confirm")
 
 def fetch_all_documents(index):
-    """Fetch all documents from index"""
+    """Fetch all documents from index with proper error handling"""
     try:
         response = index.query(
             vector=[0] * 1536,
             top_k=10000,
             include_metadata=True
         )
-        return response.matches
+        return response.matches if response else []
     except Exception as e:
         st.error(f"Error fetching documents: {str(e)}")
         return []
