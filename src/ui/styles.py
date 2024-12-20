@@ -16,16 +16,14 @@ def apply_custom_styles():
             }
             
             /* Logo styles */
-            .sidebar-logo {
+            .logo-title {
                 text-align: center;
-                padding: 2rem 1rem;
+                font-size: 2em !important;
+                font-weight: bold !important;
             }
             
-            .sidebar-logo img {
-                width: 120px;
-                height: 120px;
-                border-radius: 50%;
-                margin-bottom: 1rem;
+            .img {
+                border-radius: 60% !important;
             }
             
             /* Custom tab styles */
