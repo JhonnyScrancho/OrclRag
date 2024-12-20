@@ -22,7 +22,7 @@ def apply_custom_styles():
                 font-weight: bold !important;
             }
             
-            .img {
+            .img-containter img {
                 border-radius: 60% !important;
             }
             
@@ -92,12 +92,15 @@ def apply_custom_styles():
 def render_sidebar():
     """Render the sidebar with logo and navigation."""
     with st.sidebar:
+        st.markdown('<div class="img-container">', unsafe_allow_html=True)
         # Logo con bordo circolare
         st.image("src/img/logo.png", use_column_width=True)
-        
+        st.markdown('</div>', unsafe_allow_html=True)
+
         # Titolo sotto il logo
         st.markdown('<h1 class="logo-title">L\'Oracolo</h1>', unsafe_allow_html=True)
         
+
         # Navigation menu
         st.markdown("---")
         selected = st.radio(
