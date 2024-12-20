@@ -356,18 +356,13 @@ def main():
             display_chat_interface(index, embeddings)
             
         elif "Database" in selected:
-            st.markdown("## 📊 Database Management")
-            
-            # Process uploaded file if exists
             if uploaded_file:
                 process_uploaded_file(uploaded_file, index, embeddings)
-            
-            # Display database management interface
             display_database_view(index)
             
         else:  # Settings
             st.markdown("## ⚙️ Settings")
-            integrate_database_cleanup(index)
+            render_database_cleanup(index)
             
     except Exception as e:
         st.error(f"Application error: {str(e)}")
