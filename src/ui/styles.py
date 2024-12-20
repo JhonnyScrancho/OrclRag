@@ -69,14 +69,66 @@ def apply_custom_styles():
                 width: 100%;
                 border-radius: 5px;
                 background: linear-gradient(
-            45deg, 
-            #ff99cc,  /* Rosa chiaro */
-            #b19cd9,  /* Lavanda */
-            #99ccff,  /* Azzurro */
-            #ffb3e6   /* Rosa più intenso */
-        );
-        background-attachment: fixed;
+                    45deg,
+                    #FF69B4, /* Hot pink */
+                    #DA70D6, /* Orchid */
+                    #87CEEB, /* Sky blue */
+                    #DDA0DD, /* Plum */
+                    #98FB98, /* Pale green */
+                    #FFB6C1  /* Light pink */
+                );
+                background-size: 300% 300%;
+                animation: rainbow 12s ease infinite;
                 color: white;
+                border: none;
+                transition: all 0.3s ease;
+            }
+
+            @keyframes rainbow {
+                0% {
+                    background-position: 0% 50%;
+                }
+                50% {
+                    background-position: 100% 50%;
+                }
+                100% {
+                    background-position: 0% 50%;
+                }
+            }
+
+            /* Hover effect - colori invertiti e glowing */
+            .stButton>button:hover {
+                transform: translateY(-2px);
+                box-shadow: 0 0 15px rgba(255, 182, 193, 0.5);
+                background: linear-gradient(
+                    45deg,
+                    #FFB6C1,
+                    #98FB98,
+                    #DDA0DD,
+                    #87CEEB,
+                    #DA70D6,
+                    #FF69B4
+                );
+            }
+
+            /* Active effect - bordo arcobaleno e sfondo bianco */
+            .stButton>button:active {
+                background: white;
+                border: 3px solid transparent;
+                background-image: linear-gradient(white, white), 
+                linear-gradient(
+                    45deg,
+                    #FF69B4,
+                    #DA70D6,
+                    #87CEEB,
+                    #DDA0DD,
+                    #98FB98,
+                    #FFB6C1
+                );
+                background-origin: border-box;
+                background-clip: content-box, border-box;
+                color: #333;
+                transform: translateY(1px);
             }
             
             /* Custom metric styles */
