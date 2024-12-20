@@ -220,7 +220,6 @@ def render_sidebar():
         
         # Additional tools in sidebar
         st.divider()
-        st.subheader("Tools")
         
         # File uploader in sidebar
         uploaded_file = st.file_uploader(
