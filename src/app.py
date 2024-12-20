@@ -308,23 +308,74 @@ def handle_chat_input(prompt: str, index, embeddings):
         st.error(f"Error generating response: {str(e)}")
 
 def process_uploaded_file(uploaded_file):
-    """Process and index uploaded JSON file"""
-    with st.spinner("Processing file..."):
-        data = load_json(uploaded_file)
-        if data:
-            progress = st.progress(0)
+    """Process and index uploaded JSON file with improved error handling and status updates"""
+    try:
+        with st.spinner("Processing file..."):
+            data = load_json(uploaded_file)
+            if not data:
+                st.error("No valid data found in the uploaded file")
+                return False
+            
+            if not isinstance(data, list):
+                st.error("The uploaded file must contain a list of threads")
+                return False
+            
+            # Create a placeholder for the progress bar
+            progress_placeholder = st.empty()
+            progress_bar = st.progress(0)
             total_chunks = 0
             
-            for i, thread in enumerate(data):
-                with st.status(f"Processing: {thread['title']}", expanded=False):
-                    chunks = process_thread(thread)
-                    total_chunks += len(chunks)
-                progress.progress((i + 1) / len(data))
+            # Create a placeholder for the current thread being processed
+            status_placeholder = st.empty()
             
-            st.success(f"Processed {len(data)} threads and created {total_chunks} chunks")
+            for i, thread in enumerate(data):
+                # Validate thread structure
+                if not isinstance(thread, dict) or 'title' not in thread:
+                    continue
+                
+                # Update status with thread title
+                with status_placeholder:
+                    st.info(f"Processing thread {i+1}/{len(data)}: {thread['title']}")
+                
+                try:
+                    chunks = process_thread(thread)
+                    if chunks:
+                        total_chunks += len(chunks)
+                except Exception as e:
+                    st.warning(f"Error processing thread: {thread.get('title', 'Unknown')} - {str(e)}")
+                    continue
+                
+                # Update progress
+                progress = (i + 1) / len(data)
+                progress_bar.progress(progress)
+            
+            # Clear the status placeholder
+            status_placeholder.empty()
+            
+            if total_chunks > 0:
+                st.success(f"Successfully processed {len(data)} threads and created {total_chunks} chunks")
+            else:
+                st.warning("No chunks were created. Please check the file format.")
+            
             st.session_state['data'] = data
             return True
-    return False
+            
+    except Exception as e:
+        st.error(f"Error processing file: {str(e)}")
+        return False
+    
+def validate_thread(thread):
+    """Validate thread structure before processing"""
+    required_fields = ['title', 'url', 'posts']
+    
+    if not all(field in thread for field in required_fields):
+        missing_fields = [field for field in required_fields if field not in thread]
+        raise ValueError(f"Missing required fields: {', '.join(missing_fields)}")
+    
+    if not isinstance(thread['posts'], list):
+        raise ValueError("'posts' must be a list")
+    
+    return True    
 
 def render_database_browser(index):
     """Render database content browser"""
