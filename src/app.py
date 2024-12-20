@@ -351,11 +351,11 @@ def main():
         
         embeddings = get_embeddings()
         
-        if "Chat" in selected:  # Modifica qui per matchare il testo completo
+        if "Chat" in selected:
             st.markdown("## 💬 Chat")
             display_chat_interface(index, embeddings)
             
-        elif "Database" in selected:  # Modifica qui per matchare il testo completo
+        elif "Database" in selected:
             st.markdown("## 📊 Database Management")
             
             # Process uploaded file if exists
@@ -368,6 +368,9 @@ def main():
         else:  # Settings
             st.markdown("## ⚙️ Settings")
             integrate_database_cleanup(index)
+            
+    except Exception as e:
+        st.error(f"Application error: {str(e)}")
 
 if __name__ == "__main__":
     main()
