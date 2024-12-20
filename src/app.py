@@ -38,7 +38,6 @@ st.markdown("""
         text-align: center;
         font-size: 2em;
         font-weight: bold;
-        margin: 1rem 0 2rem 0;
     }
     
     /* Modern color scheme */
