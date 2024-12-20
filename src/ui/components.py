@@ -243,8 +243,13 @@ def render_database_cleanup(index):
         if confirm_text == "DELETE":
             try:
                 with st.spinner("Deleting all records..."):
+                    # Ottieni tutti i documenti
                     docs = fetch_all_documents(index)
                     all_ids = [doc.id for doc in docs]
+                    
+                    if not all_ids:
+                        st.info("No documents to delete")
+                        return
                     
                     batch_size = 100
                     total_batches = (len(all_ids) + batch_size - 1) // batch_size
@@ -252,15 +257,23 @@ def render_database_cleanup(index):
                     progress_bar = st.progress(0)
                     progress_text = st.empty()
                     
-                    for batch_num, i in enumerate(range(0, len(all_ids), batch_size)):
-                        batch = all_ids[i:i + batch_size]
-                        index.delete(ids=batch)
+                    # Utilizza delete_many invece di delete
+                    for batch_num in range(total_batches):
+                        start_idx = batch_num * batch_size
+                        end_idx = min((batch_num + 1) * batch_size, len(all_ids))
+                        batch = all_ids[start_idx:end_idx]
+                        
+                        # Usa delete con namespace=''
+                        index.delete(
+                            ids=batch,
+                            namespace=''
+                        )
                         
                         progress = (batch_num + 1) / total_batches
                         progress_bar.progress(progress)
                         progress_text.text(f"Deleting batch {batch_num + 1}/{total_batches}")
                     
-                    # Verify deletion
+                    # Verifica la cancellazione
                     remaining_docs = fetch_all_documents(index)
                     if not remaining_docs:
                         st.success("Database cleared successfully!")
@@ -269,5 +282,6 @@ def render_database_cleanup(index):
                         
             except Exception as e:
                 st.error(f"Error clearing database: {str(e)}")
+                st.exception(e)  # Aggiunge traceback dettagliato
         elif confirm_text:
             st.error("Please type 'DELETE' to confirm")

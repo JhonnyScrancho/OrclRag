@@ -1,46 +1,54 @@
+from embeddings.generator import get_embeddings
+from embeddings.indexer import ensure_index_exists
+from data.loader import load_json
 import streamlit as st
 import json
-from data.processor import process_thread
+from data.processor import process_thread, update_thread_in_index
 import logging
 
 logger = logging.getLogger(__name__)
 
-def process_uploaded_file(uploaded_file):
-    """Process and index uploaded JSON file"""
+async def process_uploaded_file(uploaded_file):
+    """Process the uploaded JSON file and update the index."""
     try:
-        with st.spinner("Processing file..."):
-            if uploaded_file is not None:
-                content = uploaded_file.read()
-                data = json.loads(content)
-                
-                if not isinstance(data, list):
-                    st.error("Invalid JSON format. Expected a list of threads.")
-                    return False
-                
-                progress = st.progress(0)
-                total_chunks = 0
-                
-                for i, thread in enumerate(data):
-                    with st.status(f"Processing: {thread.get('title', 'Unknown thread')}", expanded=False) as status:
-                        try:
-                            chunks = process_thread(thread)
-                            total_chunks += len(chunks)
-                            status.update(label=f"Processed: {thread.get('title', 'Unknown thread')}", state="complete")
-                        except Exception as e:
-                            logger.error(f"Error processing thread: {str(e)}")
-                            status.update(label=f"Error: {thread.get('title', 'Unknown thread')}", state="error")
-                            continue
-                        
-                        progress.progress((i + 1) / len(data))
-                
-                st.success(f"Processed {len(data)} threads and created {total_chunks} chunks")
-                st.session_state['data'] = data
-                return True
-    except json.JSONDecodeError:
-        st.error("Invalid JSON file")
-        return False
+        with st.spinner("Processing uploaded file..."):
+            # Carica il JSON
+            content = load_json(uploaded_file)
+            if not content:
+                st.error("Error loading JSON file")
+                return
+            
+            # Verifica che il contenuto sia una lista
+            if not isinstance(content, list):
+                content = [content]  # Se è un singolo thread, convertilo in lista
+            
+            # Inizializza progress bar
+            progress_bar = st.progress(0)
+            progress_text = st.empty()
+            total_threads = len(content)
+            
+            # Prepara embeddings e index
+            embeddings = get_embeddings()
+            index = ensure_index_exists()
+            
+            total_posts = 0
+            for i, thread in enumerate(content):
+                try:
+                    # Processa il thread
+                    posts_processed = await update_thread_in_index(index, thread, embeddings)
+                    total_posts += posts_processed
+                    
+                    # Aggiorna progresso
+                    progress = (i + 1) / total_threads
+                    progress_bar.progress(progress)
+                    progress_text.text(f"Processing thread {i + 1}/{total_threads}")
+                    
+                except Exception as thread_error:
+                    st.error(f"Error processing thread {i + 1}: {str(thread_error)}")
+                    continue
+            
+            st.success(f"Successfully processed {total_posts} posts from {total_threads} threads!")
+            
     except Exception as e:
         st.error(f"Error processing file: {str(e)}")
-        return False
-    
-    return False
+        st.exception(e)  # Mostra traceback dettagliato
