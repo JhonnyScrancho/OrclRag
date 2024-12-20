@@ -220,19 +220,16 @@ def render_sidebar():
                 process_uploaded_file(uploaded_file)
 
 def render_chat_interface(index, embeddings):
-    """Enhanced chat interface with fixed input"""
-    st.header("💬 Chat with L'Oracolo")
+    """Interfaccia chat pulita e semplificata"""
+    st.header("💬 Chat con L'Oracolo")
     
-    # Chat container with messages
-    with st.container():
-        st.markdown('<div class="chat-container">', unsafe_allow_html=True)
-        for msg in st.session_state.messages:
-            with st.chat_message(msg["role"]):
-                st.markdown(msg["content"])
-        st.markdown('</div>', unsafe_allow_html=True)
+    # Visualizza i messaggi
+    for msg in st.session_state.messages:
+        with st.chat_message(msg["role"]):
+            st.write(msg["content"])
     
-    # Fixed chat input at bottom
-    if prompt := st.chat_input("Ask L'Oracolo..."):
+    # Input chat in fondo
+    if prompt := st.chat_input("Chiedi all'Oracolo..."):
         handle_chat_input(prompt, index, embeddings)
 
 def render_database_view(index):
