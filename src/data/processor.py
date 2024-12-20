@@ -28,24 +28,6 @@ def extract_quote(content: str) -> tuple[str, str]:
     
     return None, content
 
-def get_thread_id(thread):
-    """Genera un ID unico per il thread."""
-    thread_key = f"{thread['url']}_{thread['scrape_time']}"
-    return hashlib.md5(thread_key.encode()).hexdigest()
-
-def fetch_all_documents(index):
-    """Recupera tutti i documenti dall'indice."""
-    try:
-        response = index.query(
-            vector=[0] * 1536,
-            top_k=10000,
-            include_metadata=True
-        )
-        return response.matches if response else []
-    except Exception as e:
-        st.error(f"Errore recupero documenti: {str(e)}")
-        return []
-
 def extract_post_content(post: Dict, thread_id: str) -> dict:
     """Estrae e formatta il contenuto di un post con metadati estesi."""
     try:
