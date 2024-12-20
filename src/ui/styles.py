@@ -152,7 +152,11 @@ def render_sidebar():
     """Render the sidebar with logo and navigation."""
     # Inizializza la session state se non esiste
     if 'current_page' not in st.session_state:
-        st.session_state.current_page = "Chat"
+        st.session_state.current_page = "💬 Chat"
+        
+    def nav_to(page):
+        st.session_state.current_page = page
+        st.rerun()
     
     with st.sidebar:
         # Logo con bordo circolare
@@ -166,13 +170,21 @@ def render_sidebar():
         # Navigation menu
         st.markdown("---")
         
-        # Navigation buttons
-        if st.button("💬 Chat", use_container_width=True):
-            st.session_state.current_page = "Chat"
-        if st.button("📊 Database", use_container_width=True):
-            st.session_state.current_page = "Database"
-        if st.button("⚙️ Settings", use_container_width=True):
-            st.session_state.current_page = "Settings"
+        # Navigation buttons with active state
+        for page in ["💬 Chat", "📊 Database", "⚙️ Settings"]:
+            button_style = "active" if st.session_state.current_page == page else ""
+            st.markdown(f'''
+                <style>
+                    div[data-testid="stHorizontalBlock"] button[kind="{page}"] {{
+                        background: {f"white !important" if button_style == "active" else "var(--primary-color)"};
+                        color: {f"black !important" if button_style == "active" else "white"};
+                        border: {f"2px solid var(--primary-color) !important" if button_style == "active" else "none"};
+                    }}
+                </style>
+            ''', unsafe_allow_html=True)
+            
+            if st.button(page, key=f"nav_{page}", use_container_width=True, type="primary", kwargs={"kind": page}):
+                nav_to(page)
         
         # File uploader section in sidebar
         st.markdown("---")
@@ -183,7 +195,7 @@ def render_sidebar():
             help="Limit 200MB per file • JSON"
         )
         
-        # Aggiungi stili CSS
+        # Lo stile esistente viene mantenuto
         st.markdown("""
             <style>
             .img-container img {
@@ -196,17 +208,26 @@ def render_sidebar():
                 margin-top: 1rem;
             }
             
-            .stButton button {
-                border: none;
+            /* Manteniamo gli stili esistenti dei bottoni */
+            .stButton>button {
+                width: 100%;
+                border-radius: 5px;
+                transition: all 0.3s ease;
                 text-align: left;
                 font-size: 1rem;
                 padding: 0.5rem 1rem;
-                width: 100%;
             }
             
-            .stButton button:hover {
+            .stButton>button:hover {
+                transform: translateY(-2px);
+                box-shadow: 0 0 15px rgba(255, 182, 193, 0.5);
+            }
+            
+            .stButton>button:active {
+                transform: translateY(1px);
             }
             </style>
         """, unsafe_allow_html=True)
         
+        # Ritorniamo la pagina corrente e il file caricato
         return st.session_state.current_page, uploaded_file
