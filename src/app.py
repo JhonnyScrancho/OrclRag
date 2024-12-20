@@ -220,9 +220,11 @@ def integrate_database_cleanup(index):
 def verify_delete_permissions(index):
     """Verify delete permissions on the index"""
     try:
-        # Attempt to delete a test document
+        # Create a test vector with some non-zero values
         test_id = "test_permissions"
         test_vector = [0.0] * 1536
+        test_vector[0] = 1.0  # Set first value to 1.0
+        test_vector[-1] = 0.5  # Set last value to 0.5
         
         # Insert test vector
         index.upsert(
@@ -233,12 +235,18 @@ def verify_delete_permissions(index):
             }]
         )
         
+        # Small delay to ensure upsert is processed
+        time.sleep(0.5)
+        
         # Try to delete it
         index.delete(ids=[test_id])
         
+        # Small delay to ensure delete is processed
+        time.sleep(0.5)
+        
         # Verify deletion
         verification = index.fetch(ids=[test_id])
-        if verification and verification.vectors:
+        if verification and hasattr(verification, 'vectors') and verification.vectors:
             return False, "Insufficient delete permissions"
             
         return True, "Delete permissions verified"
