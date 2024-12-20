@@ -192,7 +192,7 @@ def initialize_session_state():
 def render_sidebar():
     """Enhanced sidebar with navigation and tools"""
     with st.sidebar:
-        st.image("https://via.placeholder.com/150", caption="L'Oracolo")
+        st.image("src/img/logo.png", caption="L'Oracolo", use_column_width=True)
         st.title("Navigation")
         
         # Main navigation
