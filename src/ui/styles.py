@@ -99,19 +99,69 @@ def render_sidebar():
         st.markdown('<h1 class="logo-title">L\'Oracolo</h1>', unsafe_allow_html=True)
         
 
-        # Navigation menu
-        st.markdown("---")
-        selected = st.radio(
-            "",
-            ["💬 Chat", "📊 Database", "⚙️ Settings"],
-            label_visibility="collapsed"
-        )
+        # Inizializza la sessione state se non esiste
+        if 'current_page' not in st.session_state:
+            st.session_state.current_page = "Chat"
+
+        # Sidebar navigation
+        with st.sidebar:
+            # Logo con bordo circolare
+            st.markdown('<div class="img-container">', unsafe_allow_html=True)
+            st.image("src/img/logo.png", use_column_width=True)
+            st.markdown('</div>', unsafe_allow_html=True)
+            
+            st.markdown("---")
+            
+            # Navigation buttons
+            if st.button("💬 Chat", use_container_width=True):
+                st.session_state.current_page = "Chat"
+            if st.button("📊 Database", use_container_width=True):
+                st.session_state.current_page = "Database"
+            if st.button("⚙️ Settings", use_container_width=True):
+                st.session_state.current_page = "Settings"
+
+        # Stili CSS per il logo e i bottoni
+        st.markdown("""
+            <style>
+            .img-container img {
+                border-radius: 50%;
+                border: 2px solid #ffffff;
+            }
+            
+            /* Stile per i bottoni della sidebar */
+            .stButton button {
+                background-color: transparent;
+                border: none;
+                text-align: left;
+                font-size: 1rem;
+                padding: 0.5rem 1rem;
+                width: 100%;
+            }
+            
+            .stButton button:hover {
+                background-color: rgba(255, 255, 255, 0.1);
+            }
+            </style>
+        """, unsafe_allow_html=True)
+
+        # Contenuto principale basato sulla pagina selezionata
+        if st.session_state.current_page == "Chat":
+            st.header("💬 Chat")
+            # Contenuto della pagina Chat
+            
+        elif st.session_state.current_page == "Database":
+            st.header("📊 Database")
+            # Contenuto della pagina Database
+            
+        else:
+            st.header("⚙️ Settings")
+            # Contenuto della pagina Settings
         
         # File uploader section in sidebar
         st.markdown("---")
-        st.markdown("### Upload Forum JSON")
+        st.markdown("### Carica JSON")
         uploaded_file = st.file_uploader(
-            "Drag and drop file here",
+            "",
             type=['json'],
             help="Limit 200MB per file • JSON"
         )
