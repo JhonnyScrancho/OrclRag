@@ -97,7 +97,7 @@ def render_sidebar():
         st.markdown(
             """
             <div class="sidebar-logo">
-                <img src="img/logo.png" alt="L'Oracolo Logo">
+                <img src="./src/img/logo.png" alt="L'Oracolo Logo">
                 <h2>L'Oracolo</h2>
             </div>
             """,
