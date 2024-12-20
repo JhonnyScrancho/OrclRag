@@ -89,38 +89,40 @@ def apply_custom_styles():
 
 def render_sidebar():
     """Render the sidebar with logo and navigation."""
+    # Inizializza la session state se non esiste
+    if 'current_page' not in st.session_state:
+        st.session_state.current_page = "Chat"
+    
     with st.sidebar:
-        st.markdown('<div class="img-container">', unsafe_allow_html=True)
         # Logo con bordo circolare
+        st.markdown('<div class="img-container">', unsafe_allow_html=True)
         st.image("src/img/logo.png", use_column_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
         
         # Titolo sotto il logo
         st.markdown('<h1 class="logo-title">L\'Oracolo</h1>', unsafe_allow_html=True)
         
-
-        # Inizializza la sessione state se non esiste
-        if 'current_page' not in st.session_state:
+        # Navigation menu
+        st.markdown("---")
+        
+        # Navigation buttons
+        if st.button("💬 Chat", use_container_width=True):
             st.session_state.current_page = "Chat"
-
-        # Sidebar navigation
-        with st.sidebar:
-            # Logo con bordo circolare
-            st.markdown('<div class="img-container">', unsafe_allow_html=True)
-            st.image("src/img/logo.png", use_column_width=True)
-            st.markdown('</div>', unsafe_allow_html=True)
-            
-            st.markdown("---")
-            
-            # Navigation buttons
-            if st.button("💬 Chat", use_container_width=True):
-                st.session_state.current_page = "Chat"
-            if st.button("📊 Database", use_container_width=True):
-                st.session_state.current_page = "Database"
-            if st.button("⚙️ Settings", use_container_width=True):
-                st.session_state.current_page = "Settings"
-
-        # Stili CSS per il logo e i bottoni
+        if st.button("📊 Database", use_container_width=True):
+            st.session_state.current_page = "Database"
+        if st.button("⚙️ Settings", use_container_width=True):
+            st.session_state.current_page = "Settings"
+        
+        # File uploader section in sidebar
+        st.markdown("---")
+        st.markdown("### Carica JSON")
+        uploaded_file = st.file_uploader(
+            "",
+            type=['json'],
+            help="Limit 200MB per file • JSON"
+        )
+        
+        # Aggiungi stili CSS
         st.markdown("""
             <style>
             .img-container img {
@@ -128,7 +130,11 @@ def render_sidebar():
                 border: 2px solid #ffffff;
             }
             
-            /* Stile per i bottoni della sidebar */
+            .logo-title {
+                text-align: center;
+                margin-top: 1rem;
+            }
+            
             .stButton button {
                 background-color: transparent;
                 border: none;
@@ -143,27 +149,5 @@ def render_sidebar():
             }
             </style>
         """, unsafe_allow_html=True)
-
-        # Contenuto principale basato sulla pagina selezionata
-        if st.session_state.current_page == "Chat":
-            st.header("💬 Chat")
-            # Contenuto della pagina Chat
-            
-        elif st.session_state.current_page == "Database":
-            st.header("📊 Database")
-            # Contenuto della pagina Database
-            
-        else:
-            st.header("⚙️ Settings")
-            # Contenuto della pagina Settings
         
-        # File uploader section in sidebar
-        st.markdown("---")
-        st.markdown("### Carica JSON")
-        uploaded_file = st.file_uploader(
-            "",
-            type=['json'],
-            help="Limit 200MB per file • JSON"
-        )
-        
-        return selected, uploaded_file
+        return st.session_state.current_page, uploaded_file
