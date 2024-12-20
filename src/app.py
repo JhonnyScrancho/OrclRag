@@ -211,7 +211,6 @@ def render_sidebar():
         
         # Main navigation
         selected = st.radio(
-            "Go to",
             ["💬 Chat", "📊 Database", "⚙️ Settings"],
             key="navigation"
         )
