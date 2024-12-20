@@ -94,15 +94,11 @@ def apply_custom_styles():
 def render_sidebar():
     """Render the sidebar with logo and navigation."""
     with st.sidebar:
-        st.markdown(
-            """
-            <div class="sidebar-logo">
-                <img src="src/img/logo.png" alt="L'Oracolo Logo">
-                <h2>L'Oracolo</h2>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
+        # Logo con bordo circolare
+        st.image("src/img/logo.png", use_column_width=True)
+        
+        # Titolo sotto il logo
+        st.markdown('<h1 class="logo-title">L\'Oracolo</h1>', unsafe_allow_html=True)
         
         # Navigation menu
         st.markdown("---")
