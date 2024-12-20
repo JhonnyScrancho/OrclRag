@@ -1,139 +1,124 @@
 import streamlit as st
 
 def apply_custom_styles():
-    """Apply custom CSS styles to the application"""
-    st.set_page_config(
-        page_title="🔮 L'Oracolo",
-        page_icon="🔮",
-        layout="wide",
-        initial_sidebar_state="expanded"
-    )
-    
+    """Apply custom styles to the Streamlit app."""
     st.markdown("""
-    <style>
-        /* Logo and title styling */
-        img {
-            border-radius: 60% !important;
-        }
-        
-        .logo-title {
-            text-align: center;
-            font-size: 2em !important;
-            font-weight: bold !important;
-        }
-        
-        /* Modern color scheme */
-        :root {
-            --primary-color: #7C3AED;
-            --secondary-color: #4F46E5;
-            --background-color: #F9FAFB;
-            --text-color: #1F2937;
-            --sidebar-color: #F3F4F6;
-        }
-        
-        /* Sidebar styling */
-        .css-1d391kg {
-            background-color: var(--sidebar-color);
-            padding: 2rem 1rem;
-        }
-        
-        /* Main content area */
-        .main .block-container {
-            padding-top: 2rem;
-            max-width: 1200px;
-            margin: 0 auto;
-        }
-        
-        /* Chat container */
-        .chat-container {
-            height: calc(100vh - 280px);
-            overflow-y: auto;
-            padding: 1rem;
-            margin-bottom: 80px;
-            background: white;
-            border-radius: 8px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-        }
-        
-        /* Fixed chat input at bottom */
-        .stChatInputContainer {
-            position: fixed;
-            bottom: 0;
-            left: 50%;
-            transform: translateX(-50%);
-            width: 100%;
-            max-width: 800px;
-            background: white;
-            padding: 1rem;
-            box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
-            z-index: 1000;
-        }
-        
-        /* Modern button styling */
-        .stButton>button {
-            background: var(--primary-color);
-            color: white;
-            border: none;
-            border-radius: 6px;
-            padding: 0.5rem 1rem;
-            font-weight: 500;
-            transition: all 0.2s;
-        }
-        
-        .stButton>button:hover {
-            background: var(--secondary-color);
-            transform: translateY(-1px);
-        }
-        
-        /* Card styling */
-        .card {
-            background: white;
-            border-radius: 8px;
-            padding: 1.5rem;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-            margin-bottom: 1rem;
-        }
-        
-        /* Message bubbles */
-        .message {
-            padding: 1rem;
-            margin: 0.5rem 0;
-            border-radius: 8px;
-            max-width: 80%;
-        }
-        
-        .user-message {
-            background: var(--primary-color);
-            color: white;
-            margin-left: auto;
-        }
-        
-        .assistant-message {
-            background: var(--sidebar-color);
-            color: var(--text-color);
-        }
-        
-        /* Tabs styling */
-        .stTabs [data-baseweb="tab-list"] {
-            gap: 1rem;
-            margin-bottom: 1rem;
-        }
-        
-        .stTabs [data-baseweb="tab"] {
-            height: 3rem;
-            white-space: nowrap;
-            border-radius: 6px;
-        }
-        
-        /* Responsive design */
-        @media (max-width: 768px) {
-            .chat-container {
-                height: calc(100vh - 200px);
+        <style>
+            /* Main container styles */
+            .main .block-container {
+                padding-top: 2rem;
+                padding-bottom: 2rem;
             }
             
-            .message {
-                max-width: 90%;
+            /* Sidebar styles */
+            .css-1d391kg {
+                background-color: #f8f9fa;
             }
-        }
-    </style>
+            
+            /* Logo styles */
+            .sidebar-logo {
+                text-align: center;
+                padding: 2rem 1rem;
+            }
+            
+            .sidebar-logo img {
+                width: 120px;
+                height: 120px;
+                border-radius: 50%;
+                margin-bottom: 1rem;
+            }
+            
+            /* Custom tab styles */
+            .stTabs [data-baseweb="tab-list"] {
+                gap: 2rem;
+                padding: 0.5rem 1rem;
+            }
+            
+            .stTabs [data-baseweb="tab"] {
+                height: 50px;
+                white-space: pre-wrap;
+                background-color: transparent;
+                border-radius: 4px;
+                color: #0e1117;
+                padding: 0.5rem 1rem;
+            }
+            
+            .stTabs [data-baseweb="tab-list"] button[aria-selected="true"] {
+                background-color: #1f77b4;
+                color: white;
+            }
+            
+            /* Chat container styles */
+            .chat-container {
+                background-color: white;
+                border-radius: 10px;
+                padding: 1rem;
+                margin: 1rem 0;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            }
+            
+            /* File uploader styles */
+            .uploadedFile {
+                border: 2px dashed #1f77b4;
+                border-radius: 10px;
+                padding: 2rem;
+                text-align: center;
+                margin: 1rem 0;
+            }
+            
+            /* Custom button styles */
+            .stButton>button {
+                width: 100%;
+                border-radius: 5px;
+                background-color: #1f77b4;
+                color: white;
+            }
+            
+            /* Custom metric styles */
+            .css-1xarl3l {
+                background-color: #f8f9fa;
+                padding: 1rem;
+                border-radius: 5px;
+            }
+            
+            /* Chat input styles */
+            .stChatInputContainer {
+                padding: 1rem;
+                background-color: #f8f9fa;
+                border-radius: 10px;
+                margin-top: 1rem;
+            }
+        </style>
     """, unsafe_allow_html=True)
+
+def render_sidebar():
+    """Render the sidebar with logo and navigation."""
+    with st.sidebar:
+        st.markdown(
+            """
+            <div class="sidebar-logo">
+                <img src="src-img-logo.png" alt="L'Oracolo Logo">
+                <h2>L'Oracolo</h2>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+        
+        # Navigation menu
+        st.markdown("---")
+        selected = st.radio(
+            "",
+            ["💬 Chat", "📊 Database", "⚙️ Settings"],
+            label_visibility="collapsed"
+        )
+        
+        # File uploader section in sidebar
+        st.markdown("---")
+        st.markdown("### Upload Forum JSON")
+        uploaded_file = st.file_uploader(
+            "Drag and drop file here",
+            type=['json'],
+            help="Limit 200MB per file • JSON"
+        )
+        
+        return selected, uploaded_file
