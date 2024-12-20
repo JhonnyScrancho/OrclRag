@@ -352,7 +352,7 @@ def main():
         embeddings = get_embeddings()
         
         if selected == "💬 Chat":
-            st.markdown("## 💬 Chat with L'Oracolo")
+            st.markdown("## 💬 Chat")
             display_chat_interface(index, embeddings)
             
         elif selected == "📊 Database":
