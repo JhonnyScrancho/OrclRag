@@ -68,7 +68,14 @@ def apply_custom_styles():
             .stButton>button {
                 width: 100%;
                 border-radius: 5px;
-                background-color: #1f77b4;
+                background: linear-gradient(
+            45deg, 
+            #ff99cc,  /* Rosa chiaro */
+            #b19cd9,  /* Lavanda */
+            #99ccff,  /* Azzurro */
+            #ffb3e6   /* Rosa più intenso */
+        );
+        background-attachment: fixed;
                 color: white;
             }
             
