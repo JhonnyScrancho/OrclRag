@@ -106,61 +106,78 @@ def setup_rag_chain(retriever):
             if not relevant_docs:
                 return {"result": "Mi dispiace, non ho trovato informazioni rilevanti per rispondere alla tua domanda."}
 
-            # Estrai e organizza i metadati
-            posts_data = []
-            timestamps = []
-            all_keywords = []
-            sentiments = []
+            # Strutture dati per l'analisi
+            threads_data = {}  # Per raggruppare i post per thread
+            all_sentiments = []
+            all_timestamps = []
             
+            # Prima passata: raggruppamento per thread e raccolta metadati
             for doc in relevant_docs:
                 if not isinstance(doc.metadata, dict):
                     continue
                     
-                post = {
+                thread_id = doc.metadata.get("thread_id", "unknown")
+                if thread_id not in threads_data:
+                    threads_data[thread_id] = {
+                        "title": doc.metadata.get("thread_title", "Unknown Thread"),
+                        "total_posts": doc.metadata.get("total_posts", 0),
+                        "scrape_time": doc.metadata.get("scrape_time", "Unknown"),
+                        "posts": []
+                    }
+                
+                # Aggiungi il post ai dati del thread
+                post_data = {
+                    "post_id": doc.metadata.get("post_id", "unknown"),
                     "author": doc.metadata.get("author", "Unknown"),
                     "time": doc.metadata.get("post_time", "Unknown"),
                     "content": doc.page_content,
                     "sentiment": doc.metadata.get("sentiment", 0),
                     "keywords": doc.metadata.get("keywords", []),
-                    "content_length": len(doc.page_content) if doc.page_content else 0,
-                    "thread_title": doc.metadata.get("thread_title", "Unknown Thread")
+                    "content_length": len(doc.page_content) if doc.page_content else 0
                 }
-                posts_data.append(post)
+                
+                threads_data[thread_id]["posts"].append(post_data)
                 
                 # Raccogli dati per metriche
-                if post["time"] != "Unknown":
-                    timestamps.append(post["time"])
-                sentiments.append(post["sentiment"])
-                all_keywords.extend(post["keywords"])
-            
-            if not posts_data:
-                return {"result": "Ho trovato dei documenti ma non sono riuscito a processarli correttamente."}
-            
-            # Ordina i post per timestamp
-            try:
-                posts_data.sort(key=lambda x: x["time"])
-            except Exception as e:
-                logger.warning(f"Impossibile ordinare i post per timestamp: {e}")
-            
-            # Calcola metriche
-            avg_sentiment = sum(sentiments) / len(sentiments) if sentiments else 0
-            time_range = f"{min(timestamps)} - {max(timestamps)}" if timestamps else "Unknown"
-            
-            # Formatta il contesto con focus sui metadati
-            context = f"Thread: {posts_data[0]['thread_title']}\n"
-            context += f"Periodo: {time_range}\n"
-            context += f"Sentiment medio: {avg_sentiment:.2f}\n"
-            context += f"Numero totale post: {len(posts_data)}\n\n"
-            
-            context += "\n\n".join([
-                f"[{post['time']}] {post['author']}"
-                f"\nSentiment: {post['sentiment']}"
-                f"\nKeywords: {', '.join(post['keywords']) if isinstance(post['keywords'], list) else ''}"
-                f"\nLunghezza: {post['content_length']}"
-                f"\nContenuto:\n{post['content']}"
-                for post in posts_data
-            ])
-            
+                if post_data["time"] != "Unknown":
+                    all_timestamps.append(post_data["time"])
+                if isinstance(post_data["sentiment"], (int, float)):
+                    all_sentiments.append(post_data["sentiment"])
+
+            # Calcolo metriche globali
+            total_threads = len(threads_data)
+            total_posts = sum(len(thread["posts"]) for thread in threads_data.values())
+            thread_declared_posts = sum(thread.get("total_posts", 0) for thread in threads_data.values())
+            avg_sentiment = sum(all_sentiments) / len(all_sentiments) if all_sentiments else 0
+            time_range = f"{min(all_timestamps)} - {max(all_timestamps)}" if all_timestamps else "Unknown"
+
+            # Formatta il contesto
+            context = f"""STATISTICHE GLOBALI:
+    Threads analizzati: {total_threads}
+    Posts trovati: {total_posts}
+    Posts dichiarati nei metadata: {thread_declared_posts}
+    Range temporale: {time_range}
+    Sentiment medio: {avg_sentiment:.2f}
+
+    DETTAGLIO THREADS:"""
+
+            # Aggiungi dettagli per ogni thread
+            for thread_id, thread_data in threads_data.items():
+                context += f"\n\nTHREAD: {thread_data['title']}"
+                context += f"\nTotal posts: {thread_data['total_posts']}"
+                context += f"\nScrape time: {thread_data['scrape_time']}"
+                context += "\n\nPOSTS:"
+                
+                # Ordina i post per timestamp
+                thread_data["posts"].sort(key=lambda x: x["time"])
+                
+                for post in thread_data["posts"]:
+                    context += f"\n\n[{post['time']}] {post['author']}"
+                    context += f"\nSentiment: {post['sentiment']}"
+                    context += f"\nKeywords: {', '.join(post['keywords'])}"
+                    context += f"\nLunghezza: {post['content_length']}"
+                    context += f"\nContenuto:\n{post['content']}"
+
             # Preparazione del prompt
             conversation_prompt = prompt_manager.build_conversation_prompt(context, query)
             
