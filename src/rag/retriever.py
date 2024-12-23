@@ -13,24 +13,43 @@ class SmartRetriever:
         self.index = index
         self.embeddings = embeddings
         self.MAX_DOCUMENTS = 10000
+        st.write("Init SmartRetriever")
 
     def get_all_documents(self) -> List[Any]:
         """Recupera tutti i documenti dall'indice."""
         try:
-            # Usa l'embedding model per generare un vettore di query
-            dummy_query = "test query"
-            query_vector = self.embeddings.embed_query(dummy_query)
+            # Crea il vettore
+            query_vector = [0.0] * 768
+            query_vector[0] = 1.0
             
-            st.write(f"Query vector dimension: {len(query_vector)}")
+            # Ispeziona il vettore
+            st.write("Vector inspection before Pinecone query:")
+            st.write(f"- Type: {type(query_vector)}")
+            st.write(f"- Length: {len(query_vector)}")
+            st.write(f"- First 5 elements: {query_vector[:5]}")
+            st.write(f"- Last 5 elements: {query_vector[-5:]}")
             
-            results = self.index.query(
-                vector=query_vector,
-                top_k=self.MAX_DOCUMENTS,
-                include_metadata=True
-            )
+            # Ispeziona l'oggetto index
+            st.write("\nPinecone index inspection:")
+            st.write(f"- Type: {type(self.index)}")
+            st.write(f"- Dir: {dir(self.index)}")
+            
+            # Debug della chiamata
+            st.write("\nPreparing query with:")
+            query_args = {
+                "vector": query_vector,
+                "top_k": self.MAX_DOCUMENTS,
+                "include_metadata": True
+            }
+            st.write(query_args)
+            
+            results = self.index.query(**query_args)
             return results.matches
         except Exception as e:
-            st.error(f"Error in retrieval: {str(e)}")
+            st.error("Error in get_all_documents:")
+            st.error(f"- Error type: {type(e)}")
+            st.error(f"- Error message: {str(e)}")
+            st.error(f"- Dir of error: {dir(e)}")
             return []
 
     def _format_metadata(self, metadata: Dict) -> Dict:
