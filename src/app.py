@@ -40,25 +40,17 @@ def get_thread_id(thread):
 def initialize_pinecone():
     """Inizializza connessione a Pinecone."""
     try:
-        import pinecone.grpc
-        st.write("Pinecone GRPC imported")
+        pc = Pinecone(api_key=st.secrets["PINECONE_API_KEY"])
+        index = pc.Index(INDEX_NAME)
         
-        # Initialize pinecone using the GRPC client
-        pc = pinecone.grpc.PineconeClient(
-            api_key=st.secrets["PINECONE_API_KEY"]
-        )
-        st.write("Pinecone client created")
-        
-        # Get index
-        index = pc.get_index(INDEX_NAME)
-        st.write("Got index successfully")
-        
-        return index
+        # Verifica che l'indice contenga dati
+        stats = index.describe_index_stats()
+        if stats['total_vector_count'] == 0:
+            st.warning("Il database è vuoto. Carica dei dati dalla tab 'Caricamento'.")
             
+        return index
     except Exception as e:
-        st.error(f"Pinecone initialization error: {str(e)}")
-        st.write(f"Error type: {type(e)}")
-        st.write(f"Module path: {pinecone.grpc.__file__}")
+        st.error(f"Errore connessione Pinecone: {str(e)}")
         return None
 
 def process_and_index_thread(thread, embeddings, index):
@@ -155,27 +147,17 @@ def render_database_cleanup(index):
                 st.error("Full error:", exception=e)
 
 def fetch_all_documents(index):
-    """Fetch all documents from index with debug info."""
+    """Fetch all documents from index with proper error handling"""
     try:
-        st.write("Creating query vector...")
-        # Create a normalized vector
-        query_vector = [0.0] * 768
-        query_vector[0] = 1.0
-        
-        st.write(f"Vector length: {len(query_vector)}")
-        st.write(f"First few elements: {query_vector[:5]}")
-        
-        st.write("Sending query to Pinecone...")
         response = index.query(
-            vector=query_vector,
+            vector=[1.0] + [0.0] * 1535,  # Vector with first element non-zero
             top_k=10000,
             include_metadata=True
         )
-        
         return response.matches if response and hasattr(response, 'matches') else []
     except Exception as e:
-        st.error(f"Error in fetch_all_documents: {str(e)}")
-        raise
+        st.error(f"Error fetching documents: {str(e)}")
+        return []
 
 def integrate_database_cleanup(index):
     """Integration point for the database cleanup functionality"""
@@ -224,15 +206,10 @@ def verify_delete_permissions(index):
     except Exception as e:
         return False, f"Error verifying permissions: {str(e)}"
 
-
 def display_chat_interface(index, embeddings):
     """Display chat interface with improved styling."""
-    print("DEBUG: Entering display_chat_interface")
-    
     # Check if database is empty
     stats = index.describe_index_stats()
-    print(f"DEBUG: Index stats in chat interface: {stats}")
-    
     if stats['total_vector_count'] == 0:
         st.warning("Database is empty. Please load data from the Database tab.")
         return
@@ -252,26 +229,18 @@ def display_chat_interface(index, embeddings):
             st.markdown(prompt)
         
         try:
-            print("DEBUG: Creating SmartRetriever...")
             retriever = SmartRetriever(index, embeddings)
-            print("DEBUG: SmartRetriever created successfully")
-            
-            print("DEBUG: Setting up RAG chain...")
             chain = setup_rag_chain(retriever)
-            print("DEBUG: RAG chain setup complete")
             
             with st.chat_message("assistant"):
                 with st.spinner("Processing..."):
-                    print("DEBUG: Processing query:", prompt)
                     response = chain({"query": prompt})
-                    print("DEBUG: Got response from chain")
                     st.markdown(response["result"])
             
             st.session_state.messages.append(
                 {"role": "assistant", "content": response["result"]}
             )
         except Exception as e:
-            print(f"ERROR in chat processing: {str(e)}")
             st.error(f"Error generating response: {str(e)}")
     
     st.markdown('</div>', unsafe_allow_html=True)
@@ -283,8 +252,6 @@ def display_database_view(index):
     # Statistiche generali
     try:
         stats = index.describe_index_stats()
-        st.write("Index stats:", stats)  # Aggiungiamo questo
-        
         col1, col2 = st.columns(2)
         with col1:
             st.metric("Total Documents", stats['total_vector_count'])
@@ -296,17 +263,12 @@ def display_database_view(index):
 
     # Gestione documenti
     if st.button("📥 Load Documents", use_container_width=True):
-        try:
-            st.write("Attempting to fetch documents...")
-            # Usa il nuovo retriever con debug
+        with st.spinner("Loading documents..."):
             documents = fetch_all_documents(index)
-            st.write(f"Retrieved {len(documents)} documents")
-            
             if documents:
-                # Display dei dati
+                # Preparazione dati per il DataFrame
                 data = []
                 for doc in documents:
-                    st.write("Document metadata:", doc.metadata)  # Debug
                     data.append({
                         'ID': doc.id,
                         'Thread': doc.metadata.get('thread_title', 'N/A'),
@@ -316,14 +278,45 @@ def display_database_view(index):
                     })
                 
                 df = pd.DataFrame(data)
-                st.dataframe(df)
+                
+                # Filtri
+                st.subheader("🔍 Filters")
+                col1, col2 = st.columns(2)
+                with col1:
+                    thread_filter = st.multiselect(
+                        "Filter by Thread",
+                        options=sorted(df['Thread'].unique())
+                    )
+                with col2:
+                    author_filter = st.multiselect(
+                        "Filter by Author",
+                        options=sorted(df['Author'].unique())
+                    )
+                
+                # Applica filtri
+                if thread_filter:
+                    df = df[df['Thread'].isin(thread_filter)]
+                if author_filter:
+                    df = df[df['Author'].isin(author_filter)]
+                
+                # Visualizzazione dati
+                st.subheader("📋 Documents")
+                selected_rows = st.data_editor(
+                    df,
+                    hide_index=True,
+                    use_container_width=True,
+                    num_rows="dynamic"
+                )
+                
+                # Mostra metadati dettagliati per la riga selezionata
+                if selected_rows is not None and len(selected_rows) > 0:
+                    st.subheader("📝 Document Details")
+                    selected_doc = next(doc for doc in documents if doc.id == selected_rows.iloc[0]['ID'])
+                    if selected_doc:
+                        with st.expander("Metadata", expanded=True):
+                            st.json(selected_doc.metadata)
             else:
                 st.info("No documents found in the database")
-                
-        except Exception as e:
-            st.error("Error in display_database_view:")
-            st.error(f"Error type: {type(e)}")
-            st.error(f"Error message: {str(e)}")
 
 def process_uploaded_file(uploaded_file, index, embeddings):
     """Process uploaded JSON file."""
@@ -342,8 +335,6 @@ def process_uploaded_file(uploaded_file, index, embeddings):
                 st.success(f"Processed {len(data)} threads and created {total_chunks} chunks")
 
 def main():
-    print("\nDEBUG: Starting main application...")
-    
     # Apply custom styles
     apply_custom_styles()
     
@@ -351,23 +342,16 @@ def main():
     initialize_session_state()
     
     # Render sidebar and get selected option
-    print("DEBUG: Rendering sidebar...")
     selected, uploaded_file = render_sidebar()
-    print(f"DEBUG: Selected option: {selected}")
     
     try:
-        print("DEBUG: Initializing Pinecone...")
         index = initialize_pinecone()
         if index is None:
-            print("ERROR: Failed to initialize Pinecone")
             st.stop()
         
-        print("DEBUG: Getting embeddings...")
         embeddings = get_embeddings()
-        print("DEBUG: Embeddings model initialized")
         
         if "Chat" in selected:
-            print("DEBUG: Entering Chat interface")
             st.markdown("## 💬 Chat")
             display_chat_interface(index, embeddings)
             
@@ -381,7 +365,6 @@ def main():
             render_database_cleanup(index)
             
     except Exception as e:
-        print(f"ERROR in main: {str(e)}")
         st.error(f"Application error: {str(e)}")
 
 if __name__ == "__main__":
