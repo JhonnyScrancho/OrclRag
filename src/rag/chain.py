@@ -10,38 +10,17 @@ logger = logging.getLogger(__name__)
 
 class ForumMetadataManager:
     def __init__(self):
-        self.system_prompt = """Sei un analista esperto di contenuti da forum. Il tuo compito è analizzare e fornire insight accurati basati sui thread del forum, considerando sempre tutti i posts disponibili. Assicurati di:
+        self.system_prompt = """Sei un assistente esperto nell'analisi di contenuti da forum.
+Il tuo compito è fornire risposte utili basate sui thread del forum disponibili.
+Se trovi informazioni parziali o incomplete, cerca comunque di fornire la migliore risposta possibile,
+specificando eventuali limitazioni nelle informazioni disponibili.
 
-1. CONTEGGIO E ANALISI:
-   - Conta sempre il numero esatto di threads e posts disponibili
-   - Verifica la concordanza tra posts trovati e dichiarati
-   - Analizza la cronologia completa della discussione
-
-2. QUALITÀ DATI:
-   - Utilizza tutti i metadati disponibili (date, autori, sentiment)
-   - Verifica la completezza dei dati
-   - Segnala eventuali incongruenze nei dati
-
-3. RISPOSTA:
-   - Inizia SEMPRE specificando il numero esatto di threads e posts analizzati
-   - Fornisci il range temporale preciso della discussione
-   - Indica il livello di confidenza basato sulla completezza dei dati
-   - Procedi poi con l'analisi richiesta
-
-4. FORMATO:
----
-RISPOSTA DIRETTA:
-[Indicare SEMPRE: "Sono stati analizzati X threads contenenti Y posts."]
-
-LIVELLO DI CONFIDENZA:
-[Alto/Medio/Basso] basato su:
-- Numero fonti: [X threads, Y posts]
-- Range temporale: [prima data - ultima data]
-- Sentiment medio: [valore]
-
-APPROFONDIMENTO:
-[Analisi dettagliata richiesta]
----"""
+Quando rispondi:
+1. Usa tutte le informazioni disponibili, anche se parziali
+2. Specifica sempre il livello di confidenza nella risposta
+3. Se necessario, chiedi chiarimenti
+4. Suggerisci alternative se non puoi rispondere direttamente
+"""
 
     def build_conversation_prompt(self, context: str, query: str) -> str:
         # Estrai il conteggio dei threads e posts dal contesto
@@ -86,35 +65,47 @@ def setup_rag_chain(retriever):
     )
     
     def get_response(query_input):
+        """
+        Process a query and generate a response using RAG.
+        Args:
+            query_input (Union[str, Dict]): The input query string or dict with query key
+        Returns:
+            Dict: Response containing the generated result
+        """
         try:
+            # Normalize query input
             query = query_input.get("query", "") if isinstance(query_input, dict) else query_input
-            
-            # Recupera i documenti rilevanti
-            relevant_docs = retriever.get_relevant_documents(query)
-            if not relevant_docs:
-                return {"result": "Mi dispiace, non ho trovato informazioni rilevanti per rispondere alla tua domanda."}
+            logger.info(f"Processing query: {query}")
 
-            # Struttura dati per l'analisi
+            # Get relevant documents
+            relevant_docs = retriever.get_relevant_documents(query)
+            
+            if not relevant_docs:
+                logger.warning("No relevant documents found for query")
+                return {
+                    "result": "Mi dispiace, ma non ho trovato informazioni sufficienti per rispondere alla tua domanda. "
+                            "Potresti riformulare la domanda in modo diverso o fornire più contesto?"
+                }
+
+            # Organize documents by thread
             threads_data = {}
-            
-            # Set per tracciare post univoci
             unique_posts = set()
-            post_contents = set()  # Per evitare duplicati di contenuto
-            
-            # Prima passata: organizziamo i dati per thread
+            post_contents = set()
+
+            # First pass: organize data by thread
             for doc in relevant_docs:
                 meta = doc.metadata
                 thread_id = meta.get("thread_id", "unknown")
                 post_id = meta.get("post_id", "unknown")
                 content = doc.page_content.strip()
-                
-                # Skippa duplicati
+
+                # Skip duplicates
                 if post_id in unique_posts or content in post_contents:
                     continue
-                    
+
                 unique_posts.add(post_id)
                 post_contents.add(content)
-                
+
                 if thread_id not in threads_data:
                     threads_data[thread_id] = {
                         "title": meta.get("thread_title", "Unknown Thread"),
@@ -125,11 +116,11 @@ def setup_rag_chain(retriever):
                         "timestamps": [],
                         "sentiments": []
                     }
-                
-                # Aggiungi il post
+
+                # Add post data
                 post_time = meta.get("post_time", "Unknown")
                 sentiment = meta.get("sentiment", 0)
-                
+
                 threads_data[thread_id]["posts"].append({
                     "post_id": post_id,
                     "author": meta.get("author", "Unknown"),
@@ -138,79 +129,92 @@ def setup_rag_chain(retriever):
                     "sentiment": sentiment,
                     "keywords": meta.get("keywords", [])
                 })
-                
+
                 if post_time != "Unknown":
                     threads_data[thread_id]["timestamps"].append(post_time)
                 if isinstance(sentiment, (int, float)):
                     threads_data[thread_id]["sentiments"].append(sentiment)
-            
-            # Seconda passata: costruiamo il contesto
-            context = []
-            total_posts = 0
+
+            # Build context
+            context_parts = ["STATISTICHE GLOBALI:"]
+            total_posts = sum(len(thread["posts"]) for thread in threads_data.values())
             all_timestamps = []
             all_sentiments = []
-            
+
             for thread_id, thread in threads_data.items():
-                # Ordina i post per timestamp
+                # Sort posts chronologically
                 thread["posts"].sort(key=lambda x: x["time"])
                 
-                # Aggiorna contatori globali
-                total_posts += len(thread["posts"])
+                # Update global counters
                 all_timestamps.extend(thread["timestamps"])
                 all_sentiments.extend(thread["sentiments"])
-                
-                # Aggiungi info thread
-                thread_info = [
+
+                # Add thread info
+                context_parts.extend([
                     f"\nTHREAD: {thread['title']}",
                     f"Posts trovati: {len(thread['posts'])}",
                     f"Posts dichiarati: {thread['declared_posts']}"
-                ]
-                context.extend(thread_info)
-                
-                # Aggiungi posts
+                ])
+
+                # Add posts
                 for post in thread["posts"]:
-                    post_info = [
+                    context_parts.extend([
                         f"\n[{post['time']}] {post['author']}",
                         f"Sentiment: {post['sentiment']}",
                         f"Keywords: {', '.join(post['keywords'])}",
                         f"Content:\n{post['content']}\n"
-                    ]
-                    context.extend(post_info)
-            
-            # Calcola statistiche globali
-            avg_sentiment = sum(all_sentiments) / len(all_sentiments) if all_sentiments else 0
-            time_range = f"{min(all_timestamps)} - {max(all_timestamps)}" if all_timestamps else "Unknown"
-            
-            # Prepara il contesto finale
-            final_context = [
-                "STATISTICHE GLOBALI:",
-                f"Threads analizzati: {len(threads_data)}",
-                f"Posts trovati: {total_posts}",
-                f"Range temporale: {time_range}",
-                f"Sentiment medio: {avg_sentiment:.2f}\n"
-            ]
-            final_context.extend(context)
-            
-            # Crea il prompt finale
+                    ])
+
+            # Calculate global statistics
+            stats = {
+                "threads": len(threads_data),
+                "total_posts": total_posts,
+                "time_range": (
+                    f"{min(all_timestamps)} - {max(all_timestamps)}" 
+                    if all_timestamps else "Unknown"
+                ),
+                "avg_sentiment": (
+                    sum(all_sentiments) / len(all_sentiments) 
+                    if all_sentiments else 0
+                )
+            }
+
+            # Add statistics to context
+            context_parts.insert(1, f"""
+    Threads analizzati: {stats['threads']}
+    Posts trovati: {stats['total_posts']}
+    Range temporale: {stats['time_range']}
+    Sentiment medio: {stats['avg_sentiment']:.2f}
+    """)
+
+            # Build final context and prompt
+            final_context = "\n".join(context_parts)
             conversation_prompt = prompt_manager.build_conversation_prompt(
-                "\n".join(final_context), 
+                final_context, 
                 query
             )
-            
+
+            # Generate response
             messages = [
                 SystemMessage(content=prompt_manager.system_prompt),
                 HumanMessage(content=conversation_prompt)
             ]
-            
-            # Genera la risposta
+
             response = llm.invoke(messages)
             if not response or not hasattr(response, 'content'):
-                return {"result": "Mi dispiace, ho avuto un problema nel generare una risposta."}
-            
+                logger.error("Failed to generate response")
+                return {
+                    "result": "Mi dispiace, ho avuto un problema nel generare una risposta. "
+                            "Per favore, riprova tra qualche istante."
+                }
+
+            logger.info("Successfully generated response")
             return {"result": response.content}
-            
+
         except Exception as e:
-            logger.error(f"Errore nella RAG chain: {str(e)}")
-            return {"result": f"Si è verificato un errore durante l'elaborazione della tua richiesta: {str(e)}"}
-    
+            logger.error(f"Error in get_response: {str(e)}")
+            return {
+                "result": f"Si è verificato un errore durante l'elaborazione della tua richiesta. "
+                        f"Per favore, riprova o riformula la domanda in modo diverso."
+            }
     return get_response

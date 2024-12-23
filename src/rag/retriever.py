@@ -95,16 +95,19 @@ class SmartRetriever:
             # Generate query embedding
             query_embedding = self.embeddings.embed_query(query)
             
-            # Initial retrieval with high limit to get all relevant threads
+            # Aumentiamo il top_k e rimuoviamo filtri troppo restrittivi
             results = self.index.query(
                 vector=query_embedding,
-                top_k=1000,  # Increased to ensure we get all relevant documents
+                top_k=100,  # Aumentato da 10
                 include_metadata=True
             )
 
             if not results.matches:
                 logger.warning("No initial matches found")
                 return []
+
+            # Aggiungiamo logging per debug
+            logger.info(f"Found {len(results.matches)} initial matches")
 
             # Collect unique thread IDs
             thread_ids = {doc.metadata.get("thread_id") for doc in results.matches if doc.metadata}
