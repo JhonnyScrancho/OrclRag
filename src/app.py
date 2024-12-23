@@ -223,7 +223,7 @@ def display_chat_interface(index, embeddings):
             st.markdown(message["content"])
     
     # Chat input
-    if prompt := st.chat_input("Dimmi pure figliuolo..."):
+    if prompt := st.chat_input("Dimmi figliuolo..."):
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.markdown(prompt)
@@ -332,20 +332,21 @@ def display_database_view(index):
 
 
 def process_uploaded_file(uploaded_file, index, embeddings):
-    """Process uploaded JSON file."""
-    if st.button("Process File", key="process_file"):
-        with st.spinner("Processing file..."):
-            data = load_json(uploaded_file)
-            if data:
-                progress = st.progress(0)
-                total_chunks = 0
-                
-                for i, thread in enumerate(data):
-                    chunks = process_and_index_thread(thread, embeddings, index)
-                    total_chunks += chunks
-                    progress.progress((i + 1) / len(data))
-                
-                st.success(f"Processed {len(data)} threads and created {total_chunks} chunks")
+    """Process uploaded JSON file with button in sidebar."""
+    if uploaded_file:
+        if st.sidebar.button("Process File", key="process_file", use_container_width=True):
+            with st.spinner("Processing file..."):
+                data = load_json(uploaded_file)
+                if data:
+                    progress = st.progress(0)
+                    total_chunks = 0
+                    
+                    for i, thread in enumerate(data):
+                        chunks = process_and_index_thread(thread, embeddings, index)
+                        total_chunks += chunks
+                        progress.progress((i + 1) / len(data))
+                    
+                    st.success(f"Processed {len(data)} threads and created {total_chunks} chunks")
 
 def main():
     # Apply custom styles
@@ -363,10 +364,9 @@ def main():
             st.stop()
         
         embeddings = get_embeddings()
-
         
         if uploaded_file:
-                process_uploaded_file(uploaded_file, index, embeddings)
+            process_uploaded_file(uploaded_file, index, embeddings)
         
         if "Chat" in selected:
             st.markdown("## 💬 Chat")
