@@ -123,7 +123,6 @@ def apply_custom_styles():
             .stButton>button:active {
                 transform: translateY(1px);
                 box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-                background: white;
                 border: 3px solid transparent;
                 background-image: linear-gradient(white, white), 
                 linear-gradient(
