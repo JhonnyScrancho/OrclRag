@@ -1,5 +1,7 @@
 # indexer.py
 
+from datetime import datetime, timedelta
+import hashlib
 import streamlit as st
 from config import INDEX_NAME, EMBEDDING_DIMENSION
 import logging
@@ -56,3 +58,136 @@ def update_document_in_index(index, doc_id, embedding, metadata):
     except Exception as e:
         logger.error(f"Errore aggiornamento documento {doc_id}: {str(e)}")
         raise
+
+class PineconeManager:
+    def __init__(self, index):
+        self.index = index
+        self.batch_size = 100
+        self.cleanup_threshold_days = 30
+        self.namespace = "default"
+
+    def bulk_upsert(self, vectors, batch_size=None):
+        """Efficient bulk upsert with batching"""
+        if batch_size is None:
+            batch_size = self.batch_size
+            
+        total_vectors = len(vectors)
+        progress_bar = st.progress(0)
+        
+        for i in range(0, total_vectors, batch_size):
+            batch = vectors[i:i + batch_size]
+            try:
+                self.index.upsert(
+                    vectors=batch,
+                    namespace=self.namespace
+                )
+                progress = min(1.0, (i + batch_size) / total_vectors)
+                progress_bar.progress(progress)
+            except Exception as e:
+                logger.error(f"Error in bulk upsert batch {i//batch_size}: {str(e)}")
+                raise
+                
+        progress_bar.progress(1.0)
+        return total_vectors
+
+    def cleanup_old_vectors(self, days=None):
+        """Cleanup vectors older than threshold"""
+        if days is None:
+            days = self.cleanup_threshold_days
+            
+        try:
+            threshold_date = datetime.now() - timedelta(days=days)
+            
+            # Query for old vectors
+            filter = {
+                "timestamp": {"$lt": threshold_date.isoformat()}
+            }
+            
+            # Get vectors to delete
+            results = self.index.query(
+                vector=[1.0] + [0.0] * (EMBEDDING_DIMENSION-1),
+                filter=filter,
+                top_k=10000,
+                include_metadata=True
+            )
+            
+            if not results.matches:
+                return 0
+                
+            # Delete in batches
+            vector_ids = [match.id for match in results.matches]
+            total_deleted = 0
+            
+            for i in range(0, len(vector_ids), self.batch_size):
+                batch = vector_ids[i:i + self.batch_size]
+                self.index.delete(
+                    ids=batch,
+                    namespace=self.namespace
+                )
+                total_deleted += len(batch)
+                
+            return total_deleted
+            
+        except Exception as e:
+            logger.error(f"Error in cleanup: {str(e)}")
+            raise
+
+    def optimize_index(self):
+        """Optimize index operations"""
+        try:
+            # Get index statistics
+            stats = self.index.describe_index_stats()
+            total_vectors = stats.total_vector_count
+            
+            # Check for duplicates
+            results = self.index.query(
+                vector=[1.0] + [0.0] * (EMBEDDING_DIMENSION-1),
+                top_k=total_vectors,
+                include_metadata=True
+            )
+            
+            # Create map of content hashes
+            content_map = {}
+            duplicates = []
+            
+            for match in results.matches:
+                content_hash = self._get_content_hash(match.metadata)
+                if content_hash in content_map:
+                    duplicates.append(match.id)
+                else:
+                    content_map[content_hash] = match.id
+                    
+            # Delete duplicates
+            if duplicates:
+                for i in range(0, len(duplicates), self.batch_size):
+                    batch = duplicates[i:i + self.batch_size]
+                    self.index.delete(
+                        ids=batch,
+                        namespace=self.namespace
+                    )
+                    
+            return len(duplicates)
+            
+        except Exception as e:
+            logger.error(f"Error in optimization: {str(e)}")
+            raise
+
+    def _get_content_hash(self, metadata):
+        """Create unique hash for content"""
+        content = f"{metadata.get('thread_id')}_{metadata.get('post_id')}_{metadata.get('text')}"
+        return hashlib.md5(content.encode()).hexdigest()
+
+    @st.cache_data(ttl=3600)
+    def get_index_stats(self):
+        """Get cached index statistics"""
+        try:
+            stats = self.index.describe_index_stats()
+            return {
+                'total_vectors': stats.total_vector_count,
+                'dimension': stats.dimension,
+                'namespaces': stats.namespaces,
+                'index_fullness': stats.index_fullness
+            }
+        except Exception as e:
+            logger.error(f"Error getting index stats: {str(e)}")
+            return None    
