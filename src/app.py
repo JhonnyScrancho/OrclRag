@@ -37,26 +37,34 @@ def get_thread_id(thread):
     thread_key = f"{thread['url']}_{thread['scrape_time']}"
     return hashlib.md5(thread_key.encode()).hexdigest()
 
-
 def initialize_pinecone():
     """Inizializza connessione a Pinecone."""
     try:
         # Debug the API key (only length for security)
         api_key = st.secrets["PINECONE_API_KEY"]
         st.write(f"API key length: {len(api_key)}")
-        
-        # Try to print the key type
         st.write(f"API key type: {type(api_key)}")
         
-        # Initialize Pinecone with explicit error handling
+        # Import check
+        try:
+            from pinecone import Pinecone
+            st.write("Pinecone imported successfully")
+        except ImportError as e:
+            st.error(f"Error importing Pinecone: {str(e)}")
+            return None
+        
+        # Initialize with debug
         try:
             pc = Pinecone(api_key=api_key)
+            st.write(f"Pinecone instance type: {type(pc)}")
+            st.write(f"Pinecone instance dir: {dir(pc)}")
+            if pc is None:
+                st.error("Pinecone instance is None!")
+                return None
         except Exception as e:
-            st.error(f"Error creating Pinecone instance: {str(e)}")
-            st.error(f"Error type: {type(e)}")
+            st.error(f"Error initializing Pinecone: {str(e)}")
             return None
             
-        # Try to list indexes with explicit error handling
         try:
             indexes = pc.list_indexes()
             st.write("Available indexes:", indexes)
@@ -69,18 +77,15 @@ def initialize_pinecone():
             st.error(f"Index {INDEX_NAME} not found!")
             return None
             
-        # Try to get the index
         try:
             index = pc.Index(INDEX_NAME)
             return index
         except Exception as e:
             st.error(f"Error getting index: {str(e)}")
-            st.error(f"Error type: {type(e)}")
             return None
             
     except Exception as e:
         st.error(f"Pinecone initialization error: {str(e)}")
-        st.error(f"Error type: {type(e)}")
         return None
 
 def process_and_index_thread(thread, embeddings, index):
