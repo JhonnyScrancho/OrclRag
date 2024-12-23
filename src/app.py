@@ -49,19 +49,43 @@ def initialize_pinecone():
         )
         st.write("Pinecone instance created")
         
+        # Debug available indexes
+        indexes = pc.list_indexes()
+        st.write(f"Available indexes: {indexes}")
+        
         # Get index
         index = pc.Index(INDEX_NAME)
         st.write("Got index")
+        st.write(f"Index type: {type(index)}")
+        st.write(f"Index methods: {dir(index)}")
         
-        # Test the index
-        stats = index.describe_index_stats()
-        st.write("Index stats:", stats)
+        # Try to use stats() instead of describe_index_stats()
+        try:
+            stats = index.describe_index_stats()
+            st.write("Stats method worked:", stats)
+        except AttributeError:
+            st.write("Trying alternative stats method...")
+            try:
+                # Try different methods that might exist
+                if hasattr(index, 'stats'):
+                    stats = index.stats()
+                    st.write("Alternative stats worked:", stats)
+                elif hasattr(index, 'describe'):
+                    stats = index.describe()
+                    st.write("Describe method worked:", stats)
+                else:
+                    st.write("No stats method found")
+                    stats = {"dimension": 768}  # Default fallback
+            except Exception as e:
+                st.error(f"Alternative stats failed: {str(e)}")
+                stats = {"dimension": 768}  # Default fallback
         
         return index
             
     except Exception as e:
         st.error(f"Pinecone initialization error: {str(e)}")
         st.error(f"Error type: {type(e)}")
+        st.error(f"Error details: {dir(e) if hasattr(e, '__dict__') else 'No details available'}")
         return None
 
 def process_and_index_thread(thread, embeddings, index):
