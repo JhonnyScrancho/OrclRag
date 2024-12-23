@@ -4,7 +4,6 @@ from typing import List, Dict, Any
 from langchain_core.documents import Document
 import logging
 from datetime import datetime
-import numpy as np
 from config import EMBEDDING_DIMENSION
 
 logger = logging.getLogger(__name__)
@@ -18,12 +17,12 @@ class SmartRetriever:
     def get_all_documents(self) -> List[Any]:
         """Recupera tutti i documenti dall'indice."""
         try:
-            # Crea un vettore random normalizzato per la query
-            query_vector = np.random.rand(EMBEDDING_DIMENSION)
-            query_vector = query_vector / np.linalg.norm(query_vector)
+            # Use embedding model to generate a query vector
+            dummy_text = "query"
+            query_vector = self.embeddings.embed_query(dummy_text)
             
             results = self.index.query(
-                vector=query_vector.tolist(),
+                vector=query_vector,
                 top_k=self.MAX_DOCUMENTS,
                 include_metadata=True
             )
