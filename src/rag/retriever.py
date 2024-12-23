@@ -17,9 +17,9 @@ class SmartRetriever:
     def get_all_documents(self) -> List[Any]:
         """Recupera tutti i documenti dall'indice."""
         try:
-            # Use embedding model to generate a query vector
-            dummy_text = "query"
-            query_vector = self.embeddings.embed_query(dummy_text)
+            # Create a vector with correct dimension (768)
+            query_vector = [0.0] * 768
+            query_vector[0] = 1.0
             
             results = self.index.query(
                 vector=query_vector,
