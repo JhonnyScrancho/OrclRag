@@ -132,62 +132,20 @@ class PineconeManager:
             logger.error(f"Error in cleanup: {str(e)}")
             raise
 
-    def optimize_index(self):
-        """Optimize index operations"""
-        try:
-            # Get index statistics
-            stats = self.index.describe_index_stats()
-            total_vectors = stats.total_vector_count
-            
-            # Check for duplicates
-            results = self.index.query(
-                vector=[1.0] + [0.0] * (EMBEDDING_DIMENSION-1),
-                top_k=total_vectors,
-                include_metadata=True
-            )
-            
-            # Create map of content hashes
-            content_map = {}
-            duplicates = []
-            
-            for match in results.matches:
-                content_hash = self._get_content_hash(match.metadata)
-                if content_hash in content_map:
-                    duplicates.append(match.id)
-                else:
-                    content_map[content_hash] = match.id
-                    
-            # Delete duplicates
-            if duplicates:
-                for i in range(0, len(duplicates), self.batch_size):
-                    batch = duplicates[i:i + self.batch_size]
-                    self.index.delete(
-                        ids=batch,
-                        namespace=self.namespace
-                    )
-                    
-            return len(duplicates)
-            
-        except Exception as e:
-            logger.error(f"Error in optimization: {str(e)}")
-            raise
-
-    def _get_content_hash(self, metadata):
-        """Create unique hash for content"""
-        content = f"{metadata.get('thread_id')}_{metadata.get('post_id')}_{metadata.get('text')}"
-        return hashlib.md5(content.encode()).hexdigest()
-
-    @st.cache_data(ttl=3600)
     def get_index_stats(self):
         """Get cached index statistics"""
         try:
-            stats = self.index.describe_index_stats()
-            return {
-                'total_vectors': stats.total_vector_count,
-                'dimension': stats.dimension,
-                'namespaces': stats.namespaces,
-                'index_fullness': stats.index_fullness
-            }
+            # Utilizziamo una funzione interna per il caching
+            @st.cache_data(ttl=3600)
+            def _cached_stats(dimension: int):
+                stats = self.index.describe_index_stats()
+                return {
+                    'total_vectors': stats.total_vector_count,
+                    'dimension': stats.dimension,
+                    'namespaces': stats.namespaces,
+                    'index_fullness': stats.index_fullness
+                }
+            return _cached_stats(EMBEDDING_DIMENSION)
         except Exception as e:
             logger.error(f"Error getting index stats: {str(e)}")
-            return None    
+            return None 

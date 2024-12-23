@@ -161,7 +161,7 @@ def initialize_pinecone():
         # Verifica presenza API key
         if "PINECONE_API_KEY" not in st.secrets:
             st.error("🔑 Pinecone API key non trovata nelle secrets")
-            return None, None
+            return None
         
         # Inizializza connessione
         pc = Pinecone(api_key=st.secrets["PINECONE_API_KEY"])
@@ -169,71 +169,53 @@ def initialize_pinecone():
         # Verifica esistenza indice
         try:
             index = pc.Index(INDEX_NAME)
-        except Exception as e:
-            st.error(f"🚫 Indice {INDEX_NAME} non trovato: {str(e)}")
-            return None, None
-        
-        # Verifica stato indice
-        try:
+            
+            # Verifica stato indice
             stats = index.describe_index_stats()
             
             # Verifica dimensione
             index_dimension = stats.dimension
             if index_dimension != EMBEDDING_DIMENSION:
                 st.error(f"⚠️ Dimensione indice non corretta. Attesa: {EMBEDDING_DIMENSION}, Attuale: {index_dimension}")
-                return None, None
+                return None
                 
-            # Crea manager
-            pinecone_manager = PineconeManager(index)
-            
-            # Verifica permessi
-            permissions_ok, permissions_msg = verify_permissions(index)
-            if not permissions_ok:
-                st.warning(f"⚠️ {permissions_msg}")
-                # Continuiamo comunque ma logghiamo
-                logger.warning(permissions_msg)
-            
-            # Mostra statistiche indice
-            index_stats = pinecone_manager.get_index_stats()
-            if index_stats:
-                col1, col2, col3 = st.columns(3)
-                with col1:
-                    st.metric("Vettori Totali", f"{index_stats['total_vectors']:,}")
-                with col2:
-                    st.metric("Dimensione", index_stats['dimension'])
-                with col3:
-                    st.metric("Fullness", f"{index_stats['index_fullness']:.1%}")
-            
             # Verifica se l'indice è vuoto
             if stats.total_vector_count == 0:
                 st.warning("📝 Il database è vuoto. Carica dei dati dalla tab 'Database'.")
             
-            # Verifica stato della cache
-            if 'pinecone_cache' not in st.session_state:
-                st.session_state.pinecone_cache = {
-                    'last_cleanup': None,
-                    'query_count': 0,
-                    'error_count': 0
-                }
+            # Mostra statistiche indice
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Vettori Totali", f"{stats.total_vector_count:,}")
+            with col2:
+                st.metric("Dimensione", stats.dimension)
+            with col3:
+                st.metric("Namespace", len(stats.namespaces))
             
-            # Cleanup periodico se necessario
-            if should_run_cleanup(st.session_state.pinecone_cache):
-                with st.spinner("🧹 Eseguo pulizia periodica..."):
-                    deleted = pinecone_manager.cleanup_old_vectors()
-                    if deleted > 0:
-                        st.info(f"🧹 Rimossi {deleted} vettori obsoleti")
-                    st.session_state.pinecone_cache['last_cleanup'] = datetime.now()
-            
-            return index, pinecone_manager
+            return index
             
         except Exception as e:
             st.error(f"❌ Errore verifica indice: {str(e)}")
             logger.error(f"Index verification error: {str(e)}")
-            return None, None
+            return None
             
     except Exception as e:
         st.error(f"❌ Errore connessione Pinecone: {str(e)}")
         logger.error(f"Pinecone connection error: {str(e)}")
+        return None
+        
+def initialize_pinecone_and_manager():
+    """Inizializza sia Pinecone che il PineconeManager."""
+    index = initialize_pinecone()
+    if index is None:
+        return None, None
+        
+    try:
+        manager = PineconeManager(index)
+        return index, manager
+    except Exception as e:
+        st.error(f"❌ Errore inizializzazione manager: {str(e)}")
+        logger.error(f"Manager initialization error: {str(e)}")
         return None, None
 
 def verify_permissions(index):
@@ -713,8 +695,9 @@ def main():
     selected, uploaded_file = render_sidebar()
     
     try:
-        index = initialize_pinecone()
-        if index is None:
+        # Inizializza Pinecone e il manager
+        index, manager = initialize_pinecone_and_manager()
+        if index is None or manager is None:
             st.stop()
         
         embeddings = get_embeddings()
@@ -736,6 +719,7 @@ def main():
             
     except Exception as e:
         st.error(f"Application error: {str(e)}")
+        logger.error(f"Application error: {str(e)}")
 
 if __name__ == "__main__":
     main()
