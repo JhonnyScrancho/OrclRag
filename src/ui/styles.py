@@ -98,7 +98,7 @@ def apply_custom_styles():
                 }
             }
 
-            /* Hover effect - colori invertiti e glowing */
+            /* Hover effect */
             .stButton>button:hover {
                 transform: translateY(-2px);
                 box-shadow: 0 0 15px rgba(255, 182, 193, 0.5);
@@ -113,7 +113,7 @@ def apply_custom_styles():
                 );
             }
 
-            /* Active effect - bordo arcobaleno e sfondo bianco */
+            /* Active effect */
             .stButton>button:active {
                 background: white;
                 border: 3px solid transparent;
@@ -150,13 +150,13 @@ def apply_custom_styles():
         </style>
     """, unsafe_allow_html=True)
 
-def render_test_section(sidebar):
+def render_test_section():
     """Aggiunge una sezione di test nella sidebar."""
-    sidebar.markdown("---")
-    sidebar.markdown("### 🧪 Test Debug")
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("### 🧪 Test Debug")
     
     def test_embedding():
-        with sidebar:
+        with st.sidebar:
             with st.expander("Test Results", expanded=True):
                 # 1. Carica il modello
                 st.write("1. Caricamento modello...")
@@ -187,7 +187,7 @@ def render_test_section(sidebar):
                 except Exception as e:
                     st.error(f"❌ Errore: {str(e)}")
 
-    if sidebar.button("🧪 Esegui Test Debug", use_container_width=True):
+    if st.sidebar.button("🧪 Esegui Test Debug", use_container_width=True):
         test_embedding()
 
 def render_sidebar():
@@ -200,78 +200,76 @@ def render_sidebar():
         st.session_state.current_page = page
         st.rerun()
     
-    with st.sidebar as sidebar:
-        # Logo con bordo circolare
-        st.markdown('<div class="img-container">', unsafe_allow_html=True)
-        st.image("src/img/logo.png", use_column_width=True)
-        st.markdown('</div>', unsafe_allow_html=True)
-        
-        # Titolo sotto il logo
-        st.markdown('<h1 class="logo-title">L\'Oracolo</h1>', unsafe_allow_html=True)
-        
-        # Navigation menu
-        st.markdown("---")
-        
-        # Navigation buttons with active state
-        for page in ["💬 Chat", "📊 Database", "⚙️ Settings"]:
-            button_style = "active" if st.session_state.current_page == page else ""
-            st.markdown(f'''
-                <style>
-                    div[data-testid="stHorizontalBlock"] button[kind="{page}"] {{
-                        background: {f"white !important" if button_style == "active" else "var(--primary-color)"};
-                        color: {f"black !important" if button_style == "active" else "white"};
-                        border: {f"2px solid var(--primary-color) !important" if button_style == "active" else "none"};
-                    }}
-                </style>
-            ''', unsafe_allow_html=True)
-            
-            if st.button(page, key=f"nav_{page}", use_container_width=True, type="primary", kwargs={"kind": page}):
-                nav_to(page)
-        
-        # File uploader section
-        st.markdown("---")
-        st.markdown("### Carica JSON")
-        uploaded_file = st.file_uploader(
-            "",
-            type=['json'],
-            help="Limit 200MB per file • JSON"
-        )
-        
-        # Aggiungi la sezione di test
-        render_test_section(sidebar)
-        
-        # Lo stile esistente viene mantenuto
-        st.markdown("""
+    # Logo con bordo circolare
+    st.sidebar.markdown('<div class="img-container">', unsafe_allow_html=True)
+    st.sidebar.image("src/img/logo.png", use_column_width=True)
+    st.sidebar.markdown('</div>', unsafe_allow_html=True)
+    
+    # Titolo sotto il logo
+    st.sidebar.markdown('<h1 class="logo-title">L\'Oracolo</h1>', unsafe_allow_html=True)
+    
+    # Navigation menu
+    st.sidebar.markdown("---")
+    
+    # Navigation buttons with active state
+    for page in ["💬 Chat", "📊 Database", "⚙️ Settings"]:
+        button_style = "active" if st.session_state.current_page == page else ""
+        st.sidebar.markdown(f'''
             <style>
-            .img-container img {
-                border-radius: 50%;
-                border: 2px solid #ffffff;
-            }
-            
-            .logo-title {
-                text-align: center;
-                margin-top: 1rem;
-            }
-            
-            /* Manteniamo gli stili esistenti dei bottoni */
-            .stButton>button {
-                width: 100%;
-                border-radius: 5px;
-                transition: all 0.3s ease;
-                text-align: left;
-                font-size: 1rem;
-                padding: 0.5rem 1rem;
-            }
-            
-            .stButton>button:hover {
-                transform: translateY(-2px);
-                box-shadow: 0 0 15px rgba(255, 182, 193, 0.5);
-            }
-            
-            .stButton>button:active {
-                transform: translateY(1px);
-            }
+                div[data-testid="stHorizontalBlock"] button[kind="{page}"] {{
+                    background: {f"white !important" if button_style == "active" else "var(--primary-color)"};
+                    color: {f"black !important" if button_style == "active" else "white"};
+                    border: {f"2px solid var(--primary-color) !important" if button_style == "active" else "none"};
+                }}
             </style>
-        """, unsafe_allow_html=True)
+        ''', unsafe_allow_html=True)
         
-        return st.session_state.current_page, uploaded_file
+        if st.sidebar.button(page, key=f"nav_{page}", use_container_width=True, type="primary", kwargs={"kind": page}):
+            nav_to(page)
+    
+    # File uploader section
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("### Carica JSON")
+    uploaded_file = st.sidebar.file_uploader(
+        "",
+        type=['json'],
+        help="Limit 200MB per file • JSON"
+    )
+    
+    # Aggiungi la sezione di test
+    render_test_section()
+    
+    # Stili aggiuntivi
+    st.sidebar.markdown("""
+        <style>
+        .img-container img {
+            border-radius: 50%;
+            border: 2px solid #ffffff;
+        }
+        
+        .logo-title {
+            text-align: center;
+            margin-top: 1rem;
+        }
+        
+        .stButton>button {
+            width: 100%;
+            border-radius: 5px;
+            transition: all 0.3s ease;
+            text-align: left;
+            font-size: 1rem;
+            padding: 0.5rem 1rem;
+        }
+        
+        .stButton>button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 0 15px rgba(255, 182, 193, 0.5);
+        }
+        
+        .stButton>button:active {
+            transform: translateY(1px);
+        }
+        </style>
+    """, unsafe_allow_html=True)
+    
+    return st.session_state.current_page, uploaded_file
