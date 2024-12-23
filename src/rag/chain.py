@@ -89,33 +89,22 @@ def setup_rag_chain(retriever):
         try:
             query = query_input.get("query", "") if isinstance(query_input, dict) else query_input
             
-            # Inizializza il batch processor
-            processor = BatchDocumentProcessor(retriever, max_docs=MAX_DOCUMENTS_PER_QUERY)
-            
             # Recupera i documenti rilevanti
             relevant_docs = retriever.get_relevant_documents(query)
             if not relevant_docs:
                 return {"result": "Mi dispiace, non ho trovato informazioni rilevanti per rispondere alla tua domanda."}
 
-            # Processa i documenti in batch
-            processed_docs = processor.process_in_batches(relevant_docs)
-            
-            # Ottieni statistiche del processing
-            stats = processor.get_statistics()
-            st.sidebar.write(f"Processati {stats['total_documents']} documenti da {stats['total_threads']} thread")
-
             # Struttura dati per l'analisi
             threads_data = {}
+            unique_posts = set()  # Per tenere traccia dei post unici
             all_timestamps = []
             all_sentiments = []
             
             # Analizza i documenti processati
-            for doc in processed_docs:
-                if not doc:  # Salta documenti non validi
-                    continue
-                    
-                meta = doc['metadata']
+            for doc in relevant_docs:
+                meta = doc.metadata
                 thread_id = meta.get("thread_id", "unknown")
+                post_id = meta.get("post_id", "unknown")  # Aggiungi questo
                 
                 if thread_id not in threads_data:
                     threads_data[thread_id] = {
@@ -126,30 +115,32 @@ def setup_rag_chain(retriever):
                         "posts": []
                     }
                 
-                # Aggiungi il post ai dati del thread
-                post_time = meta.get("post_time", "Unknown")
-                sentiment = meta.get("sentiment", 0)
-                
-                threads_data[thread_id]["posts"].append({
-                    "post_id": meta.get("post_id", "unknown"),
-                    "author": meta.get("author", "Unknown"),
-                    "time": post_time,
-                    "content": doc.get('content', ''),
-                    "sentiment": sentiment,
-                    "keywords": meta.get("keywords", [])
-                })
-                
-                if post_time != "Unknown":
-                    all_timestamps.append(post_time)
-                if isinstance(sentiment, (int, float)):
-                    all_sentiments.append(sentiment)
+                # Aggiungi il post solo se non è già stato processato
+                if post_id not in unique_posts:
+                    unique_posts.add(post_id)
+                    post_time = meta.get("post_time", "Unknown")
+                    sentiment = meta.get("sentiment", 0)
+                    
+                    threads_data[thread_id]["posts"].append({
+                        "post_id": post_id,
+                        "author": meta.get("author", "Unknown"),
+                        "time": post_time,
+                        "content": doc.page_content,
+                        "sentiment": sentiment,
+                        "keywords": meta.get("keywords", [])
+                    })
+                    
+                    if post_time != "Unknown":
+                        all_timestamps.append(post_time)
+                    if isinstance(sentiment, (int, float)):
+                        all_sentiments.append(sentiment)
             
             # Prepara il contesto strutturato
             context = "STATISTICHE GLOBALI:\n"
             context += f"Threads analizzati: {len(threads_data)}\n"
+            context += f"Posts trovati: {len(unique_posts)}\n"
             total_posts = sum(len(thread["posts"]) for thread in threads_data.values())
             total_declared = sum(thread["declared_posts"] for thread in threads_data.values())
-            context += f"Posts trovati: {total_posts}\n"
             context += f"Posts dichiarati nei metadata: {total_declared}\n"
             
             if all_timestamps:
