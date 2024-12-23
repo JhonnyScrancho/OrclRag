@@ -33,7 +33,7 @@ def apply_custom_styles():
                 padding: 0.5rem 0;
             }
             
-            .img-container img {
+            img {
                 border-radius: 50% !important;
                 border: 2px solid #ffffff;
                 box-shadow: 0 4px 8px rgba(0,0,0,0.1);
