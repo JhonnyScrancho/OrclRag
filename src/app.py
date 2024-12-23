@@ -41,21 +41,32 @@ def get_thread_id(thread):
 def initialize_pinecone():
     """Inizializza connessione a Pinecone."""
     try:
-        print("DEBUG: Initializing Pinecone connection...")
+        st.write("Initializing Pinecone...")
         pc = Pinecone(api_key=st.secrets["PINECONE_API_KEY"])
+        
+        # Print available indexes
+        indexes = pc.list_indexes()
+        st.write("Available indexes:", indexes)
+        
+        if INDEX_NAME not in indexes:
+            st.error(f"Index {INDEX_NAME} not found. Available indexes: {indexes}")
+            return None
+            
         index = pc.Index(INDEX_NAME)
         
-        # Get and print index stats
-        stats = index.describe_index_stats()
-        print(f"DEBUG: Pinecone index stats: {stats}")
-        
-        if stats['total_vector_count'] == 0:
-            st.warning("Il database è vuoto. Carica dei dati dalla tab 'Caricamento'.")
+        # Test if the index is working
+        try:
+            stats = index.describe_index_stats()
+            st.write("Index stats:", stats)
+        except Exception as e:
+            st.error(f"Error getting index stats: {str(e)}")
+            return None
             
         return index
+        
     except Exception as e:
-        print(f"ERROR in Pinecone initialization: {str(e)}")
-        st.error(f"Errore connessione Pinecone: {str(e)}")
+        st.error(f"Pinecone initialization error: {str(e)}")
+        st.error("Check your PINECONE_API_KEY in secrets")
         return None
 
 def process_and_index_thread(thread, embeddings, index):
