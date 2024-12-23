@@ -4,7 +4,7 @@ import streamlit as st
 import logging
 from datetime import datetime
 from config import LLM_MODEL, MAX_DOCUMENTS_PER_QUERY
-from batch_processor import BatchDocumentProcessor  # Nuovo import
+from data.batch_processor import BatchDocumentProcessor
 
 logger = logging.getLogger(__name__)
 
