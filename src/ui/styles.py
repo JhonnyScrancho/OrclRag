@@ -194,19 +194,36 @@ def render_sidebar():
         help="Limit 200MB per file • JSON"
     )
     
-    # Stili aggiuntivi
+    # Add container for process button at bottom
+    st.markdown("""
+        <div class="process-file-container">
+            <div id="process-button-placeholder"></div>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    # Stili aggiuntivi per sidebar e componenti
     st.sidebar.markdown("""
         <style>
+        /* Stili container immagine */
         .img-container img {
             border-radius: 50%;
             border: 2px solid #ffffff;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
         }
         
+        /* Stili titolo logo */
         .logo-title {
             text-align: center;
             margin-top: 1rem;
+            font-size: 2em;
+            font-weight: bold;
+            background: linear-gradient(45deg, #FF69B4, #DA70D6, #87CEEB);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            padding: 0.5rem 0;
         }
         
+        /* Stili bottoni navigazione */
         .stButton>button {
             width: 100%;
             border-radius: 5px;
@@ -214,15 +231,107 @@ def render_sidebar():
             text-align: left;
             font-size: 1rem;
             padding: 0.5rem 1rem;
+            margin-bottom: 0.5rem;
+            border: none;
+            background: linear-gradient(
+                45deg,
+                #FF69B4,
+                #DA70D6,
+                #87CEEB
+            );
+            background-size: 200% 200%;
+            animation: gradient 5s ease infinite;
+            color: white;
+            font-weight: 500;
         }
         
+        /* Animazione gradiente */
+        @keyframes gradient {
+            0% {
+                background-position: 0% 50%;
+            }
+            50% {
+                background-position: 100% 50%;
+            }
+            100% {
+                background-position: 0% 50%;
+            }
+        }
+        
+        /* Effetti hover bottoni */
         .stButton>button:hover {
             transform: translateY(-2px);
-            box-shadow: 0 0 15px rgba(255, 182, 193, 0.5);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+            background-position: right center;
         }
         
+        /* Effetti click bottoni */
         .stButton>button:active {
             transform: translateY(1px);
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+        
+        /* Stili divisori */
+        hr {
+            margin: 1.5rem 0;
+            border: 0;
+            height: 1px;
+            background: linear-gradient(to right, transparent, #e0e0e0, transparent);
+        }
+        
+        /* Stili uploader file */
+        .uploadedFile {
+            border: 2px dashed #1f77b4;
+            border-radius: 10px;
+            padding: 1rem;
+            margin: 1rem 0;
+            transition: all 0.3s ease;
+        }
+        
+        .uploadedFile:hover {
+            border-color: #DA70D6;
+            background-color: rgba(218,112,214,0.05);
+        }
+        
+        /* Stili container processo file */
+        .process-file-container {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 17rem;
+            background-color: white;
+            padding: 1rem;
+            border-top: 1px solid #e6e6e6;
+            box-shadow: 0 -2px 10px rgba(0,0,0,0.05);
+            z-index: 1000;
+        }
+        
+        /* Stili sidebar principale */
+        .css-1d391kg {
+            background-color: #f8f9fa;
+            padding-bottom: 5rem !important;  /* Spazio per il bottone fisso */
+        }
+        
+        /* Stili header sezioni */
+        .sidebar .sidebar-content {
+            background-color: #f8f9fa;
+        }
+        
+        /* Responsive adjustments */
+        @media (max-width: 768px) {
+            .process-file-container {
+                width: 100%;
+                left: 0;
+            }
+            
+            .stButton>button {
+                font-size: 0.9rem;
+                padding: 0.4rem 0.8rem;
+            }
+            
+            .logo-title {
+                font-size: 1.5em;
+            }
         }
         </style>
     """, unsafe_allow_html=True)
