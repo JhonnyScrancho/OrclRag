@@ -1,4 +1,3 @@
-from venv import logger
 from sentence_transformers import CrossEncoder
 import streamlit as st
 from typing import List, Dict, Any
@@ -8,42 +7,47 @@ from datetime import datetime
 from config import EMBEDDING_DIMENSION
 from functools import lru_cache
 
+logger = logging.getLogger(__name__)
+
 class SmartRetriever:
     def __init__(self, index, embeddings):
         self.index = index
         self.embeddings = embeddings
         self.MAX_DOCUMENTS = 10000
         self.EMBEDDING_DIMENSION = EMBEDDING_DIMENSION
-        # Inizializza il cross-encoder per re-ranking
+        # Initialize cross-encoder for re-ranking
         self.cross_encoder = CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2')
-        # Cache TTL in secondi (1 ora)
-        self.CACHE_TTL = 3600
 
-    @st.cache_data(ttl=3600)
-    def get_all_documents(self) -> List[Any]:
-        """Cached version of document retrieval"""
-        return self._get_all_documents_impl()
-
-    def _get_all_documents_impl(self) -> List[Any]:
-        """Actual implementation of document retrieval"""
+    def _cached_documents(self, query_vector: List[float], top_k: int):
+        """Internal cached function for document retrieval"""
+        # Convert query_vector to tuple for hashing
+        query_key = tuple(query_vector)
         try:
-            query_vector = [0.0] * EMBEDDING_DIMENSION
-            query_vector[0] = 1.0
-            
             results = self.index.query(
                 vector=query_vector,
-                top_k=self.MAX_DOCUMENTS,
+                top_k=top_k,
                 include_metadata=True
             )
+            return results.matches if results and hasattr(results, 'matches') else []
+        except Exception as e:
+            logger.error(f"Error in cached document retrieval: {str(e)}")
+            return []
+
+    def get_all_documents(self) -> List[Any]:
+        """Retrieve all documents using zero vector with first element as 1"""
+        try:
+            query_vector = [0.0] * self.EMBEDDING_DIMENSION
+            query_vector[0] = 1.0
             
-            if not results.matches:
-                logger.warning("No documents found in index")
-                return []
-                
-            return results.matches
+            # Use Streamlit's cache_data at function call level
+            @st.cache_data(ttl=3600)
+            def get_cached_docs(vector_key: tuple):
+                return self._cached_documents(list(vector_key), self.MAX_DOCUMENTS)
+            
+            return get_cached_docs(tuple(query_vector))
             
         except Exception as e:
-            logger.error(f"Error fetching documents: {str(e)}")
+            logger.error(f"Error fetching all documents: {str(e)}")
             return []
 
     def _rerank_documents(self, query: str, documents: List[Document], top_k: int = 10) -> List[Document]:
@@ -64,9 +68,8 @@ class SmartRetriever:
         # Return top-k documents
         return [doc for doc, _ in reranked_docs[:top_k]]
 
-    @st.cache_data(ttl=3600)
     def get_relevant_documents(self, query: str) -> List[Document]:
-        """Enhanced document retrieval with re-ranking and caching"""
+        """Enhanced document retrieval with re-ranking"""
         try:
             # Generate query embedding
             query_embedding = self.embeddings.embed_query(query)
@@ -74,27 +77,24 @@ class SmartRetriever:
             if len(query_embedding) != self.EMBEDDING_DIMENSION:
                 raise ValueError(f"Query embedding dimension mismatch")
             
-            # Initial retrieval (get more documents for re-ranking)
-            results = self.index.query(
-                vector=query_embedding,
-                top_k=20,  # Get more docs for re-ranking
-                include_metadata=True
-            )
+            # Use cached retrieval for initial documents
+            @st.cache_data(ttl=3600)
+            def get_cached_relevant_docs(query_key: str, vector_key: tuple):
+                docs = self._cached_documents(list(vector_key), 20)  # Get more for re-ranking
+                return [
+                    Document(
+                        page_content=doc.metadata.get("text", ""),
+                        metadata=self._format_metadata(doc.metadata)
+                    ) for doc in docs
+                ]
             
-            if not results.matches:
+            # Get initial documents
+            documents = get_cached_relevant_docs(query, tuple(query_embedding))
+            
+            if not documents:
                 return [Document(page_content="No documents found", metadata={"type": "error"})]
             
-            # Convert matches to Documents
-            documents = []
-            for match in results.matches:
-                metadata = self._format_metadata(match.metadata)
-                doc = Document(
-                    page_content=metadata["text"],
-                    metadata=metadata
-                )
-                documents.append(doc)
-            
-            # Re-rank documents
+            # Re-rank documents (not cached as it's query-dependent)
             reranked_docs = self._rerank_documents(query, documents)
             
             # Sort by timestamp
@@ -116,8 +116,8 @@ class SmartRetriever:
             )]
 
     def _format_metadata(self, metadata: Dict) -> Dict:
-        """Format and standardize metadata with additional fields"""
-        formatted = {
+        """Format and standardize metadata"""
+        return {
             "author": metadata.get("author", "Unknown"),
             "post_time": metadata.get("post_time", "Unknown"),
             "text": metadata.get("text", ""),
@@ -127,7 +127,6 @@ class SmartRetriever:
             "post_id": metadata.get("post_id", ""),
             "keywords": metadata.get("keywords", []),
             "sentiment": metadata.get("sentiment", 0),
-            "chunk_index": metadata.get("chunk_index", 0),  # Added for better context
-            "total_chunks": metadata.get("total_chunks", 1)  # Added for better context
+            "chunk_index": metadata.get("chunk_index", 0),
+            "total_chunks": metadata.get("total_chunks", 1)
         }
-        return formatted
