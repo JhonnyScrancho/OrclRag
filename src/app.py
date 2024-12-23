@@ -444,54 +444,57 @@ def display_chat_interface(index, embeddings):
         st.warning("Database is empty. Please load data from the Database tab.")
         return
 
-    # Inizializza timer per metriche
+    # Initialize timer for metrics
     start_time = time.time()
     
     # Chat container
     st.markdown('<div class="chat-container">', unsafe_allow_html=True)
     
-    # Display chat messages with unique keys for each message
+    # Display chat messages
     for msg_idx, message in enumerate(st.session_state.messages):
-        with st.chat_message(message["role"], key=f"chat_msg_{msg_idx}"):
-            st.markdown(message["content"])
-            
-            # Mostra feedback UI solo per risposte dell'assistente
-            if message["role"] == "assistant":
-                with st.expander("📊 Fornisci Feedback", expanded=False):
-                    col1, col2 = st.columns([3, 1])
-                    with col1:
-                        feedback = st.slider(
-                            "Quanto è stata utile la risposta?",
-                            min_value=1,
-                            max_value=5,
-                            value=3,
-                            help="1 = Per niente utile, 5 = Molto utile",
-                            key=f"feedback_slider_{msg_idx}"
-                        )
-                        comment = st.text_area(
-                            "Commento (opzionale)",
-                            key=f"feedback_comment_{msg_idx}",
-                            max_chars=500
-                        )
-                    with col2:
-                        if st.button("Invia Feedback", key=f"feedback_btn_{msg_idx}"):
-                            st.session_state.metrics_manager.add_feedback(
-                                msg_idx,
-                                feedback,
-                                comment
-                            )
-                            st.success("Grazie per il tuo feedback!")
+        # Create unique container for each message
+        message_container = st.container()
+        with message_container:
+            with st.chat_message(message["role"]):
+                st.markdown(message["content"])
                 
-                # Mostra metriche di risposta se disponibili
-                if "metrics" in message:
-                    with st.expander("📊 Metriche Risposta", expanded=False):
-                        col1, col2, col3 = st.columns(3)
+                # Show feedback UI only for assistant responses
+                if message["role"] == "assistant":
+                    with st.expander("📊 Fornisci Feedback", expanded=False):
+                        col1, col2 = st.columns([3, 1])
                         with col1:
-                            st.metric("Tempo Recupero", f"{message['metrics']['retrieval_time']:.2f}s")
+                            feedback = st.slider(
+                                "Quanto è stata utile la risposta?",
+                                min_value=1,
+                                max_value=5,
+                                value=3,
+                                help="1 = Per niente utile, 5 = Molto utile",
+                                key=f"feedback_slider_{msg_idx}"
+                            )
+                            comment = st.text_area(
+                                "Commento (opzionale)",
+                                key=f"feedback_comment_{msg_idx}",
+                                max_chars=500
+                            )
                         with col2:
-                            st.metric("Tempo Generazione", f"{message['metrics']['generation_time']:.2f}s")
-                        with col3:
-                            st.metric("Tempo Totale", f"{message['metrics']['total_time']:.2f}s")
+                            if st.button("Invia Feedback", key=f"feedback_btn_{msg_idx}"):
+                                st.session_state.metrics_manager.add_feedback(
+                                    msg_idx,
+                                    feedback,
+                                    comment
+                                )
+                                st.success("Grazie per il tuo feedback!")
+                    
+                    # Show response metrics if available
+                    if "metrics" in message:
+                        with st.expander("📊 Metriche Risposta", expanded=False):
+                            col1, col2, col3 = st.columns(3)
+                            with col1:
+                                st.metric("Tempo Recupero", f"{message['metrics']['retrieval_time']:.2f}s")
+                            with col2:
+                                st.metric("Tempo Generazione", f"{message['metrics']['generation_time']:.2f}s")
+                            with col3:
+                                st.metric("Tempo Totale", f"{message['metrics']['total_time']:.2f}s")
     
     # Chat input
     if prompt := st.chat_input("Dimmi figliuolo..."):
