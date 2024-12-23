@@ -679,21 +679,66 @@ def display_database_view(index):
 
 
 def process_uploaded_file(uploaded_file, index, embeddings):
-    """Process uploaded JSON file with button in sidebar."""
+    """Process uploaded JSON file with proper indexing."""
     if uploaded_file:
         if st.sidebar.button("Process File", key="process_file", use_container_width=True):
             with st.spinner("Processing file..."):
-                data = load_json(uploaded_file)
-                if data:
+                try:
+                    # Carica il file JSON
+                    data = load_json(uploaded_file)
+                    if not data:
+                        return
+
+                    total_posts = 0
                     progress = st.progress(0)
-                    total_chunks = 0
                     
+                    # Processa ogni thread
                     for i, thread in enumerate(data):
-                        chunks = process_and_index_thread(thread, embeddings, index)
-                        total_chunks += chunks
-                        progress.progress((i + 1) / len(data))
+                        try:
+                            # Process and index thread
+                            processed_posts = process_thread(thread, index, embeddings)
+                            total_posts += processed_posts
+                            
+                            # Update progress
+                            current_progress = (i + 1) / len(data)
+                            progress.progress(current_progress)
+                            
+                            st.markdown(f"""
+                            Processing thread: {i+1}/{len(data)}
+                            - Title: {thread['title']}
+                            - Posts processed: {processed_posts}
+                            - Total posts so far: {total_posts}
+                            """)
+                            
+                        except Exception as e:
+                            logger.error(f"Error processing thread {i}: {str(e)}")
+                            st.error(f"Error processing thread {thread.get('title', 'unknown')}: {str(e)}")
+                            continue
+
+                    # Clear progress bar
+                    progress.empty()
                     
-                    st.success(f"Processed {len(data)} threads and created {total_chunks} chunks")
+                    st.success(f"Successfully processed {len(data)} threads with {total_posts} total posts")
+                    
+                    # Aggiungi un piccolo delay per permettere all'indice di aggiornarsi
+                    time.sleep(2)
+                    
+                    # Aggiorna processed_threads in session_state
+                    if 'processed_threads' not in st.session_state:
+                        st.session_state.processed_threads = set()
+                    
+                    for thread in data:
+                        thread_id = get_thread_id(thread)
+                        st.session_state.processed_threads.add(thread_id)
+                    
+                    # Ricarica la pagina per riflettere i nuovi dati
+                    st.rerun()
+                    
+                except Exception as e:
+                    st.error(f"Error processing file: {str(e)}")
+                    logger.error(f"File processing error: {str(e)}")
+                    
+    return st.session_state.processed_threads if 'processed_threads' in st.session_state else set()
 
 
 class RateLimiter:
