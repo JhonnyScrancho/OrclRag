@@ -11,14 +11,11 @@ logger = logging.getLogger(__name__)
 
 class SmartRetriever:
     def __init__(self, index, embeddings):
+        """Initialize the SmartRetriever with index and embeddings model."""
         self.index = index
         self.embeddings = embeddings
-        self.MAX_DOCUMENTS = 1000  # Aumentato significativamente
-        self.FINAL_K = FINAL_K
-        self.EMBEDDING_DIMENSION = EMBEDDING_DIMENSION
-        # Initialize cross-encoder for re-ranking
         self.cross_encoder = CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2')
-
+        
     @lru_cache(maxsize=100)
     def _cached_documents(self, query_vector_key: tuple, top_k: int) -> List[Any]:
         """Internal cached function for document retrieval"""
@@ -39,9 +36,9 @@ class SmartRetriever:
         """Fetch all documents for a specific thread."""
         try:
             results = self.index.query(
-                vector=[1.0] + [0.0] * (self.EMBEDDING_DIMENSION - 1),
+                vector=[1.0] + [0.0] * (self.embeddings.dimension - 1),
                 filter={"thread_id": thread_id},
-                top_k=self.MAX_DOCUMENTS,
+                top_k=1000,  # Increased to ensure we get all documents
                 include_metadata=True
             )
             return results.matches if results and hasattr(results, 'matches') else []
@@ -55,7 +52,7 @@ class SmartRetriever:
             return []
             
         if top_k is None:
-            top_k = self.FINAL_K
+            top_k = len(documents)  # Default to keeping all documents
 
         try:
             # Prepare pairs for cross-encoder
@@ -76,15 +73,15 @@ class SmartRetriever:
             return documents[:top_k]  # Fallback to original order
 
     def get_all_documents(self) -> List[Any]:
-        """Retrieve all documents using zero vector with first element as 1"""
+        """Retrieve all documents from the index."""
         try:
-            query_vector = [0.0] * self.EMBEDDING_DIMENSION
+            query_vector = [0.0] * self.embeddings.dimension
             query_vector[0] = 1.0
             
             # Use Streamlit's cache_data at function call level
             @st.cache_data(ttl=3600)
             def get_cached_docs(vector_key: tuple):
-                return self._cached_documents(vector_key, self.MAX_DOCUMENTS)
+                return self._cached_documents(vector_key, 1000)  # Increased limit
             
             return get_cached_docs(tuple(query_vector))
             
@@ -98,13 +95,10 @@ class SmartRetriever:
             # Generate query embedding
             query_embedding = self.embeddings.embed_query(query)
             
-            if len(query_embedding) != self.EMBEDDING_DIMENSION:
-                raise ValueError(f"Query embedding dimension mismatch: {len(query_embedding)} vs {self.EMBEDDING_DIMENSION}")
-            
-            # Initial retrieval with high limit
+            # Initial retrieval with high limit to get all relevant threads
             results = self.index.query(
                 vector=query_embedding,
-                top_k=INITIAL_RETRIEVAL_K,  # Get more initial results
+                top_k=1000,  # Increased to ensure we get all relevant documents
                 include_metadata=True
             )
 
@@ -113,74 +107,79 @@ class SmartRetriever:
                 return []
 
             # Collect unique thread IDs
-            thread_ids = set(doc.metadata.get("thread_id") for doc in results.matches if doc.metadata)
+            thread_ids = {doc.metadata.get("thread_id") for doc in results.matches if doc.metadata}
             logger.info(f"Found {len(thread_ids)} unique threads")
-
-            # Fetch complete threads
+            
+            # Fetch ALL documents for each relevant thread
             all_documents = []
             for thread_id in thread_ids:
-                thread_docs = self._fetch_thread_documents(thread_id)
-                logger.info(f"Thread {thread_id}: found {len(thread_docs)} documents")
-                all_documents.extend(thread_docs)
-
-            # Convert to Document objects
-            documents = []
-            for doc in all_documents:
-                if not doc.metadata.get("text"):
-                    logger.warning(f"Document missing text: {doc.id}")
+                if not thread_id:
                     continue
                     
+                # Query specifically for this thread to get ALL its posts
+                thread_results = self.index.query(
+                    vector=[1.0] + [0.0] * (self.embeddings.dimension - 1),
+                    filter={"thread_id": thread_id},
+                    top_k=1000,  # High number to get all posts
+                    include_metadata=True
+                )
+                
+                if thread_results and thread_results.matches:
+                    all_documents.extend(thread_results.matches)
+                    logger.info(f"Retrieved {len(thread_results.matches)} posts from thread {thread_id}")
+
+            # Convert to Document objects with deduplication
+            seen_post_ids = set()
+            documents = []
+            
+            for doc in all_documents:
+                post_id = doc.metadata.get("post_id")
+                if not post_id or post_id in seen_post_ids:
+                    continue
+                    
+                seen_post_ids.add(post_id)
+                
+                # Ensure all necessary metadata is included
                 documents.append(Document(
                     page_content=doc.metadata.get("text", ""),
-                    metadata=self._format_metadata(doc.metadata)
-                ))
-
-            # Log retrieval statistics
-            logger.info(f"Total documents retrieved: {len(documents)}")
-            thread_stats = {}
-            for doc in documents:
-                thread_id = doc.metadata.get("thread_id")
-                if thread_id not in thread_stats:
-                    thread_stats[thread_id] = {
-                        "count": 0,
-                        "total": doc.metadata.get("total_posts", 0)
+                    metadata={
+                        "thread_id": doc.metadata.get("thread_id"),
+                        "thread_title": doc.metadata.get("thread_title"),
+                        "post_id": post_id,
+                        "author": doc.metadata.get("author"),
+                        "post_time": doc.metadata.get("post_time"),
+                        "total_posts": doc.metadata.get("total_posts"),
+                        "declared_posts": doc.metadata.get("declared_posts"),
+                        "sentiment": doc.metadata.get("sentiment", 0),
+                        "keywords": doc.metadata.get("keywords", []),
+                        "url": doc.metadata.get("url"),
+                        "text": doc.metadata.get("text", "")
                     }
-                thread_stats[thread_id]["count"] += 1
-
-            for thread_id, stats in thread_stats.items():
-                logger.info(f"Thread {thread_id}: {stats['count']}/{stats['total']} posts")
-
-            # Re-rank if we have more documents than needed
-            if len(documents) > self.FINAL_K:
-                documents = self._rerank_documents(query, documents)
-
-            # Sort by timestamp if available
-            try:
-                documents.sort(key=lambda x: datetime.strptime(
-                    x.metadata["post_time"], 
-                    "%Y-%m-%dT%H:%M:%S%z"
                 ))
-            except (ValueError, TypeError) as e:
-                logger.warning(f"Unable to sort documents by timestamp: {str(e)}")
+
+            # Sort chronologically
+            documents.sort(key=lambda x: x.metadata.get("post_time", ""))
+            
+            # Log retrieval statistics
+            logger.info(f"Retrieved and processed {len(documents)} total documents from {len(thread_ids)} threads")
+            
+            # Optional: calculate and log thread completeness
+            for thread_id in thread_ids:
+                thread_posts = [d for d in documents if d.metadata.get("thread_id") == thread_id]
+                if thread_posts:
+                    declared = thread_posts[0].metadata.get("total_posts", 0)
+                    found = len(thread_posts)
+                    logger.info(f"Thread {thread_id}: found {found}/{declared} posts")
 
             return documents
 
         except Exception as e:
             logger.error(f"Error in retrieval: {str(e)}")
+            st.error(f"Error retrieving documents: {str(e)}")
             return []
 
-    def _format_metadata(self, metadata: Dict) -> Dict:
-        """Format and standardize metadata"""
-        return {
-            "author": metadata.get("author", "Unknown"),
-            "post_time": metadata.get("post_time", "Unknown"),
-            "text": metadata.get("text", ""),
-            "thread_title": metadata.get("thread_title", "Unknown Thread"),
-            "thread_id": metadata.get("thread_id", "unknown"),
-            "url": metadata.get("url", ""),
-            "post_id": metadata.get("post_id", ""),
-            "keywords": metadata.get("keywords", []),
-            "sentiment": metadata.get("sentiment", 0),
-            "total_posts": metadata.get("total_posts", 0),
-            "declared_posts": metadata.get("declared_posts", 0)
-        }
+    def query_with_limit(self, query: str, limit: int = 5) -> List[Document]:
+        """Query documents with a specific limit."""
+        docs = self.get_relevant_documents(query)
+        reranked_docs = self._rerank_documents(query, docs, top_k=limit)
+        return reranked_docs
