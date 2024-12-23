@@ -14,6 +14,9 @@ from ui.styles import apply_custom_styles, render_sidebar
 from config import INDEX_NAME
 import pandas as pd
 import logging
+from functools import wraps
+from collections import deque
+from config import MAX_REQUESTS_PER_MINUTE, RATE_LIMIT_PERIOD
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -347,6 +350,48 @@ def process_uploaded_file(uploaded_file, index, embeddings):
                         progress.progress((i + 1) / len(data))
                     
                     st.success(f"Processed {len(data)} threads and created {total_chunks} chunks")
+
+
+class RateLimiter:
+    def __init__(self):
+        self.requests = {}
+
+    def __call__(self, func):
+        @wraps(func)
+        def wrapped(*args, **kwargs):
+            now = time.time()
+            
+            # Get or create request queue for this session
+            session_id = id(st.session_state)
+            if session_id not in self.requests:
+                self.requests[session_id] = deque()
+            
+            # Clean old requests
+            while (self.requests[session_id] and 
+                   self.requests[session_id][0] < now - RATE_LIMIT_PERIOD):
+                self.requests[session_id].popleft()
+            
+            # Check rate limit
+            if len(self.requests[session_id]) >= MAX_REQUESTS_PER_MINUTE:
+                wait_time = self.requests[session_id][0] + RATE_LIMIT_PERIOD - now
+                if wait_time > 0:
+                    st.warning(f"Rate limit exceeded. Please wait {int(wait_time)} seconds.")
+                    time.sleep(min(wait_time, 5))  # Max wait of 5 seconds
+            
+            # Add current request
+            self.requests[session_id].append(now)
+            
+            return func(*args, **kwargs)
+        return wrapped
+
+# Usage in display_chat_interface
+rate_limiter = RateLimiter()
+
+@rate_limiter
+def process_chat_message(prompt, retriever, chain):
+    response = chain({"query": prompt})
+    return response["result"]
+
 
 def main():
     # Apply custom styles
