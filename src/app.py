@@ -115,7 +115,7 @@ class MetricsManager:
         }
 
 def display_feedback_ui(query_idx: int):
-    """Display feedback UI for a query"""
+    """Display feedback UI for a query with unique keys for each component"""
     with st.expander("📊 Provide Feedback", expanded=False):
         col1, col2 = st.columns([3, 1])
         with col1:
@@ -124,10 +124,11 @@ def display_feedback_ui(query_idx: int):
                 min_value=1,
                 max_value=5,
                 value=3,
-                help="1 = Not relevant at all, 5 = Extremely relevant"
+                help="1 = Not relevant at all, 5 = Extremely relevant",
+                key=f"feedback_slider_{query_idx}"  # Unique key per slider
             )
         with col2:
-            if st.button("Submit Feedback"):
+            if st.button("Submit Feedback", key=f"feedback_button_{query_idx}"):  # Unique key per button
                 st.session_state.metrics_manager.add_feedback(
                     query_idx,
                     feedback
@@ -439,7 +440,7 @@ def display_chat_interface(index, embeddings):
     """Display chat interface with metrics tracking and feedback."""
     # Check if database is empty
     stats = index.describe_index_stats()
-    if stats['total_vector_count'] == 0:
+    if stats.total_vector_count == 0:
         st.warning("Database is empty. Please load data from the Database tab.")
         return
 
@@ -449,9 +450,9 @@ def display_chat_interface(index, embeddings):
     # Chat container
     st.markdown('<div class="chat-container">', unsafe_allow_html=True)
     
-    # Display chat messages
+    # Display chat messages with unique keys for each message
     for msg_idx, message in enumerate(st.session_state.messages):
-        with st.chat_message(message["role"]):
+        with st.chat_message(message["role"], key=f"chat_msg_{msg_idx}"):  # Unique key per chat message
             st.markdown(message["content"])
             
             # Mostra feedback UI solo per risposte dell'assistente
