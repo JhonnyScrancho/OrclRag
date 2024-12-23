@@ -40,19 +40,17 @@ def get_thread_id(thread):
 def initialize_pinecone():
     """Inizializza connessione a Pinecone."""
     try:
-        import pinecone
+        from pinecone import Pinecone, ServerlessSpec
         st.write("Pinecone imported")
         
-        # Initialize pinecone
-        pinecone.init(api_key=st.secrets["PINECONE_API_KEY"])
-        st.write("Pinecone initialized")
+        # Initialize pinecone v3 style
+        pc = Pinecone(
+            api_key=st.secrets["PINECONE_API_KEY"]
+        )
+        st.write("Pinecone instance created")
         
-        # Get the index
-        if INDEX_NAME not in pinecone.list_indexes():
-            st.error(f"Index {INDEX_NAME} not found!")
-            return None
-            
-        index = pinecone.Index(INDEX_NAME)
+        # Get index
+        index = pc.Index(INDEX_NAME)
         st.write("Got index")
         
         # Test the index
