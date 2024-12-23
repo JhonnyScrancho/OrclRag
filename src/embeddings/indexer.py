@@ -1,57 +1,48 @@
-from typing import List
+# indexer.py
+
 import streamlit as st
-from config import INDEX_NAME
+from config import INDEX_NAME, EMBEDDING_DIMENSION
 import logging
+from pinecone import Pinecone
 
 logger = logging.getLogger(__name__)
 
-def ensure_index_exists(pinecone_client):
-    """Connette all'indice Pinecone esistente."""
+def ensure_index_exists(api_key):
+    """Verifica e connette all'indice Pinecone."""
     try:
-        # Debug: mostra le impostazioni di connessione
-        st.write("Tentativo di connessione a Pinecone:")
-        st.write(f"- Nome indice richiesto: {INDEX_NAME}")
+        logger.info("Initializing Pinecone connection...")
+        pc = Pinecone(api_key=api_key)
         
-        # Nuova sintassi per Pinecone v3
-        pc = Pinecone(api_key=st.secrets["PINECONE_API_KEY"])
-        
-        # Get list of existing indexes
-        existing_indexes = pc.list_indexes()
-        
-        if INDEX_NAME not in existing_indexes:
-            available_indexes = ', '.join(existing_indexes) if existing_indexes else 'nessuno'
-            error_msg = f"L'indice {INDEX_NAME} non esiste. Per favore, crealo dalla console di Pinecone. Indici disponibili: {available_indexes}"
-            st.error(error_msg)
-            raise ValueError(error_msg)
-        
-        # Get the index
+        # Verifica indice esistente
         index = pc.Index(INDEX_NAME)
-        st.success(f"Connesso con successo all'indice: {INDEX_NAME}")
+        
+        # Verifica dimensione corretta
+        stats = index.describe_index_stats()
+        index_dimension = stats.dimension
+        
+        logger.info(f"Connected to index. Dimension: {index_dimension}")
+        
+        if index_dimension != EMBEDDING_DIMENSION:
+            error_msg = f"Dimensione indice non corretta. Attesa: {EMBEDDING_DIMENSION}, Attuale: {index_dimension}"
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+            
         return index
         
     except Exception as e:
-        error_msg = f"""
-        Errore durante la connessione a Pinecone: {str(e)}
-        - API Key length: {len(st.secrets['PINECONE_API_KEY'])}
-        - Indice richiesto: {INDEX_NAME}
-        """
+        error_msg = f"Errore connessione Pinecone: {str(e)}"
         logger.error(error_msg)
-        st.error(error_msg)
-        raise
-        
-    except Exception as e:
-        error_msg = f"""
-        Errore durante la connessione a Pinecone: {str(e)}
-        - API Key length: {len(st.secrets['PINECONE_API_KEY'])}
-        - Indice richiesto: {INDEX_NAME}
-        """
-        logger.error(error_msg)
-        st.error(error_msg)
         raise
 
-def update_document_in_index(index, doc_id: str, embedding: List[float], metadata: dict):
-    """Aggiorna o inserisce un documento nell'indice."""
+def update_document_in_index(index, doc_id, embedding, metadata):
+    """Aggiorna documento nell'indice con verifica dimensione."""
     try:
+        # Verifica dimensione embedding
+        if len(embedding) != EMBEDDING_DIMENSION:
+            raise ValueError(f"Dimensione embedding non valida: {len(embedding)}")
+            
+        logger.info(f"Updating document {doc_id} in index")
+        
         index.upsert(
             vectors=[{
                 "id": doc_id,
@@ -59,6 +50,9 @@ def update_document_in_index(index, doc_id: str, embedding: List[float], metadat
                 "metadata": metadata
             }]
         )
+        
+        logger.info(f"Successfully updated document {doc_id}")
+        
     except Exception as e:
-        logger.error(f"Error in update_document_in_index: {str(e)}", exc_info=True)
+        logger.error(f"Errore aggiornamento documento {doc_id}: {str(e)}")
         raise

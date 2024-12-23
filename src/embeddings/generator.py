@@ -1,6 +1,8 @@
+# generator.py
+
 from sentence_transformers import SentenceTransformer
 import torch
-import numpy as np
+from langchain.text_splitter import RecursiveCharacterTextSplitter
 from config import CHUNK_OVERLAP, CHUNK_SIZE, EMBEDDING_DIMENSION, EMBEDDING_MODEL
 import logging
 
@@ -8,58 +10,67 @@ logger = logging.getLogger(__name__)
 
 class SentenceTransformersEmbeddings:
     def __init__(self, model_name=EMBEDDING_MODEL):
-        self.model = SentenceTransformer(model_name)
-        # Validate model output dimension matches configuration
-        test_embedding = self.model.encode("test", normalize_embeddings=True)
-        actual_dimension = len(test_embedding)
-        if actual_dimension != EMBEDDING_DIMENSION:
-            logger.error(f"Model dimension mismatch. Expected {EMBEDDING_DIMENSION}, got {actual_dimension}")
-            raise ValueError(f"Model dimension mismatch. Expected {EMBEDDING_DIMENSION}, got {actual_dimension}")
+        try:
+            self.model = SentenceTransformer(model_name)
+            # Valida la dimensione del modello
+            test_embedding = self.model.encode("test", normalize_embeddings=True)
+            actual_dimension = len(test_embedding)
             
-        self.dimension = EMBEDDING_DIMENSION
-        # Use GPU if available
-        if torch.cuda.is_available():
-            self.model.to('cuda')
-        logger.info(f"Initialized embeddings model with dimension {self.dimension}")
+            logger.info(f"Model loaded with dimension: {actual_dimension}")
+            
+            if actual_dimension != EMBEDDING_DIMENSION:
+                raise ValueError(f"Dimensione del modello non corretta. Attesa {EMBEDDING_DIMENSION}, ricevuta {actual_dimension}")
+                
+            self.dimension = EMBEDDING_DIMENSION
+            
+            # Usa GPU se disponibile
+            if torch.cuda.is_available():
+                self.model.to('cuda')
+                logger.info("Using GPU for embeddings")
+            else:
+                logger.info("Using CPU for embeddings")
+                
+        except Exception as e:
+            logger.error(f"Errore inizializzazione embeddings: {str(e)}")
+            raise
 
     def embed_query(self, text):
-        """Generate embedding for a single query."""
+        """Genera embedding per una singola query."""
         try:
             with torch.no_grad():
+                # Aggiungi log per debugging
+                logger.info(f"Generating embedding for text of length: {len(text)}")
+                
                 embedding = self.model.encode(text, normalize_embeddings=True)
-                # Validate dimension
+                
+                # Verifica dimensione
                 if len(embedding) != self.dimension:
-                    raise ValueError(f"Embedding dimension mismatch. Expected {self.dimension}, got {len(embedding)}")
+                    raise ValueError(f"Dimensione embedding non corretta. Attesa {self.dimension}, ricevuta {len(embedding)}")
+                
+                logger.info(f"Successfully generated embedding of dimension: {len(embedding)}")
                 return embedding.tolist()
+                
         except Exception as e:
-            logger.error(f"Error generating query embedding: {str(e)}")
+            logger.error(f"Errore generazione embedding: {str(e)}")
             raise
 
-    def embed_documents(self, documents):
-        """Generate embeddings for a list of documents."""
-        try:
-            with torch.no_grad():
-                embeddings = self.model.encode(documents, normalize_embeddings=True)
-                # Validate dimensions
-                if embeddings.shape[1] != self.dimension:
-                    raise ValueError(f"Embeddings dimension mismatch. Expected {self.dimension}, got {embeddings.shape[1]}")
-                return [emb.tolist() for emb in embeddings]
-        except Exception as e:
-            logger.error(f"Error generating document embeddings: {str(e)}")
-            raise
-
-def create_chunks(texts: list[str]) -> list:
-    """Split texts into chunks."""
+def create_chunks(texts):
+    """Divide i testi in chunks."""
     text_splitter = RecursiveCharacterTextSplitter(
         chunk_size=CHUNK_SIZE,
         chunk_overlap=CHUNK_OVERLAP
     )
-    return text_splitter.create_documents(texts)
+    chunks = text_splitter.create_documents(texts)
+    logger.info(f"Created {len(chunks)} chunks from {len(texts)} texts")
+    return chunks
 
 def get_embeddings():
-    """Initialize embeddings model with proper configuration."""
+    """Inizializza il modello embeddings con logging dettagliato."""
     try:
-        return SentenceTransformersEmbeddings()
+        logger.info("Initializing embeddings model...")
+        embeddings = SentenceTransformersEmbeddings()
+        logger.info(f"Successfully initialized embeddings with dimension: {embeddings.dimension}")
+        return embeddings
     except Exception as e:
-        logger.error(f"Error initializing embeddings: {str(e)}")
+        logger.error(f"Fatal error initializing embeddings: {str(e)}")
         raise
