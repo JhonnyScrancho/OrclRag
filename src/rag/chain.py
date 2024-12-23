@@ -1,56 +1,63 @@
-from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_openai import ChatOpenAI
 import streamlit as st
 import logging
+from datetime import datetime
+from config import LLM_MODEL
 
 logger = logging.getLogger(__name__)
 
-class ForumPromptManager:
+class ForumMetadataManager:
     def __init__(self):
-        self.system_prompt = """Sei un assistente specializzato nell'analisi di conversazioni di forum tech.
+        self.system_prompt = """Sei un analista esperto nell'analisi di conversazioni di forum.
 Utilizza sempre questi metadati per arricchire le tue risposte:
 
-- sentiment: per capire il tono del messaggio (-1 a +1)
-- keywords: per identificare i temi chiave
-- post_time: per il contesto temporale
-- metadata.content_length: per dare peso ai post più elaborati
+METADATI DISPONIBILI PER OGNI POST:
+1. SENTIMENT: Score da -1 a +1 che indica il tono emotivo
+2. KEYWORDS: Parole chiave estratte automaticamente
+3. POST_TIME: Timestamp del post per analisi temporale
+4. CONTENT_LENGTH: Lunghezza del post come indicatore di dettaglio
 
-REGOLE FONDAMENTALI:
-1. Cita SEMPRE il timestamp e l'autore quando riporti un post
-2. Usa il sentiment per interpretare il contesto emotivo
-3. Considera le keywords per capire il focus della discussione
-4. Dai più peso ai post più lunghi e articolati
-5. Traccia la conversazione attraverso le citazioni ("X said: ...")
+CITAZIONI:
+Il contenuto può contenere citazioni nel formato:
+"[Autore] said: [testo citato] Click to expand... [risposta]"
+- Identifica chi risponde a chi
+- Analizza il contesto delle risposte
+- Traccia le conversazioni tra utenti
+- Valuta il tono delle risposte usando il sentiment
 
-Se ti chiedono statistiche o trend:
-- Usa il sentiment per tracciare l'evoluzione della discussione
-- Raggruppa per keywords per identificare i temi ricorrenti
-- Analizza la frequenza delle interazioni tra utenti
-- Considera la lunghezza dei post per valutare la profondità della discussione
-
-FORMAT RISPOSTA:
-1. Citazione diretta [timestamp, autore, sentiment]
-2. Insight basato sui metadati disponibili
-3. Conclusione supportata dai dati"""
+FORMATO RISPOSTA:
+1. [Timestamp, Autore] Citazione rilevante
+   - Sentiment: {valore}
+   - Keywords chiave: [lista]
+   - Lunghezza: {valore}
+   - Citazioni: menziona se il post è una risposta
+2. Analisi basata sui metadati disponibili
+3. Pattern di interazione identificati
+4. Conclusione supportata dai dati"""
 
     def build_conversation_prompt(self, context: str, query: str) -> str:
-        return f"""ANALISI RICHIESTA: {query}
+        return f"""QUERY: {query}
 
 CONTESTO FORUM:
 {context}
 
-Ricorda di:
-1. Usare i metadati (sentiment, keywords, lunghezza) per arricchire l'analisi
-2. Citare sempre timestamp e autore
-3. Evidenziare il tono della conversazione usando il sentiment score"""
+LINEE GUIDA:
+1. Usa SEMPRE i metadati disponibili per contestualizzare
+2. Cita con timestamp e autore
+3. Evidenzia sentiment significativi
+4. Identifica pattern nelle keywords
+5. Considera la lunghezza dei post per il peso
+6. Analizza le interazioni attraverso le citazioni
+7. Traccia il filo delle conversazioni basandoti sul formato delle citazioni"""
 
 def setup_rag_chain(retriever):
-    """Configura una chain RAG ottimizzata per l'analisi di forum."""
-    prompt_manager = ForumPromptManager()
+    """Configura RAG chain focalizzata sui metadati."""
+    prompt_manager = ForumMetadataManager()
     
     llm = ChatOpenAI(
-        model_name="gpt-4-turbo-preview",
-        temperature=0.3,
+        model_name=LLM_MODEL,
+        temperature=LLM_TEMPERATURE,
         api_key=st.secrets["OPENAI_API_KEY"]
     )
     
@@ -60,10 +67,10 @@ def setup_rag_chain(retriever):
             
             docs = retriever.get_all_documents()
             if not docs:
-                return {"result": "Non ho trovato dati sufficienti per rispondere."}
+                return {"result": "Dati insufficienti per l'analisi."}
 
-            # Prepara il contesto arricchito con metadati
-            posts_context = []
+            # Estrai e organizza i metadati
+            posts_data = []
             for doc in docs:
                 metadata = doc.metadata
                 post = {
@@ -75,23 +82,21 @@ def setup_rag_chain(retriever):
                     "content_length": metadata.get("content_length", 0),
                     "thread_title": metadata.get("thread_title", "Unknown Thread")
                 }
-                posts_context.append(post)
+                posts_data.append(post)
             
             # Ordina per timestamp
-            posts_context.sort(key=lambda x: x["time"])
+            posts_data.sort(key=lambda x: x["time"])
             
-            # Formatta il contesto con metadati
-            thread_title = posts_context[0]["thread_title"]
-            context = f"Thread: {thread_title}\n\n" + "\n\n".join([
+            # Formatta il contesto con focus sui metadati
+            context = f"Thread: {posts_data[0]['thread_title']}\n\n" + "\n\n".join([
                 f"[{post['time']}] {post['author']}"
                 f"\nSentiment: {post['sentiment']}"
                 f"\nKeywords: {', '.join(post['keywords'])}"
-                f"\nLength: {post['content_length']}"
-                f"\nContent:\n{post['content']}"
-                for post in posts_context
+                f"\nLunghezza: {post['content_length']}"
+                f"\nContenuto:\n{post['content']}"
+                for post in posts_data
             ])
             
-            # Costruisci il prompt finale
             conversation_prompt = prompt_manager.build_conversation_prompt(context, query)
             
             messages = [
