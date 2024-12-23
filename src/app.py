@@ -363,14 +363,16 @@ def main():
             st.stop()
         
         embeddings = get_embeddings()
+
+        
+        if uploaded_file:
+                process_uploaded_file(uploaded_file, index, embeddings)
         
         if "Chat" in selected:
             st.markdown("## 💬 Chat")
             display_chat_interface(index, embeddings)
             
         elif "Database" in selected:
-            if uploaded_file:
-                process_uploaded_file(uploaded_file, index, embeddings)
             display_database_view(index)
             
         else:  # Settings
