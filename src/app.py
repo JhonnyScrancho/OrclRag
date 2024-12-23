@@ -322,7 +322,11 @@ def display_database_view(index):
 
 def process_uploaded_file(uploaded_file, index, embeddings):
     """Process uploaded JSON file."""
-    if st.button("Process File", key="process_file"):
+    # Rimuoviamo la condizione if st.button() per rendere il bottone sempre visibile quando c'è un file
+    st.write("File caricato:", uploaded_file.name)
+    process_button = st.button("Process File", key="process_file", type="primary")
+    
+    if process_button:
         with st.spinner("Processing file..."):
             data = load_json(uploaded_file)
             if data:
@@ -358,7 +362,9 @@ def main():
             display_chat_interface(index, embeddings)
             
         elif "Database" in selected:
+            st.markdown("## 📊 Database")  # Aggiungiamo un titolo per chiarezza
             if uploaded_file:
+                # Mostra il bottone di processo solo quando c'è un file caricato
                 process_uploaded_file(uploaded_file, index, embeddings)
             display_database_view(index)
             
