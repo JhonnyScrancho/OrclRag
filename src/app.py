@@ -22,7 +22,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 st.set_page_config(
-    page_title="🔮 L'Oracolo",
+    page_title="L'Oracolo",
     page_icon="🔮",
     layout="wide",
     initial_sidebar_state="expanded"
