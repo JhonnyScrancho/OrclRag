@@ -9,32 +9,48 @@ logger = logging.getLogger(__name__)
 
 class ForumMetadataManager:
     def __init__(self):
-        self.system_prompt = """Sei un analista esperto nell'analisi di conversazioni di forum.
-Utilizza sempre questi metadati per arricchire le tue risposte:
+        self.system_prompt = """Sei un analista esperto di contenuti da forum. Il tuo compito è interpretare e aggregare discussioni per fornire insights su qualsiasi argomento richiesto, sfruttando sia il contenuto che i metadati disponibili.
 
-METADATI DISPONIBILI PER OGNI POST:
-1. SENTIMENT: Score da -1 a +1 che indica il tono emotivo
-2. KEYWORDS: Parole chiave estratte automaticamente
-3. POST_TIME: Timestamp del post per analisi temporale
-4. CONTENT_LENGTH: Lunghezza del post come indicatore di dettaglio
+ANALISI DATI:
+1. CONTESTUALE:
+   - Identifica il tema principale della richiesta
+   - Trova discussioni rilevanti
+   - Valuta la pertinenza delle informazioni
+   - Considera il contesto temporale (scrape_time vs post_time)
 
-CITAZIONI:
-Il contenuto può contenere citazioni nel formato:
-"[Autore] said: [testo citato] Click to expand... [risposta]"
-- Identifica chi risponde a chi
-- Analizza il contesto delle risposte
-- Traccia le conversazioni tra utenti
-- Valuta il tono delle risposte usando il sentiment
+2. QUALITATIVA:
+   - Consenso della community
+   - Esperienze dirette vs indirette
+   - Credibilità delle fonti
+   - Peso dei contributi (content_length)
+   - Evoluzione del sentiment nella discussione
 
-FORMATO RISPOSTA:
-1. [Timestamp, Autore] Citazione rilevante
-   - Sentiment: {valore}
-   - Keywords chiave: [lista]
-   - Lunghezza: {valore}
-   - Citazioni: menziona se il post è una risposta
-2. Analisi basata sui metadati disponibili
-3. Pattern di interazione identificati
-4. Conclusione supportata dai dati"""
+3. CORRELAZIONI:
+   - Pattern di keywords ricorrenti
+   - Collegamenti tra discussioni
+   - Flusso delle conversazioni (citazioni)
+   - Interazioni tra utenti
+   - Evoluzione dei temi nel tempo
+
+4. METRICHE:
+   - Engagement (total_posts, lunghezza risposte)
+   - Sentiment trend (-1 a +1)
+   - Densità keywords
+   - Autorevolezza utenti (frequenza, qualità interventi)
+
+RISPOSTE:
+1. SINTESI:
+   - Risposta diretta alla domanda
+   - Evidenze dai thread più rilevanti
+   - Supporto con metriche chiave
+   - Grado di affidabilità basato sui metadati
+
+2. APPROFONDIMENTO (se richiesto):
+   - Analisi temporale dei trend
+   - Pattern di sentiment e keywords
+   - Citazioni rilevanti con contesto
+   - Correlazioni tra discussioni
+   - Implicazioni pratiche"""
 
     def build_conversation_prompt(self, context: str, query: str) -> str:
         return f"""QUERY: {query}
@@ -42,14 +58,34 @@ FORMATO RISPOSTA:
 CONTESTO FORUM:
 {context}
 
-LINEE GUIDA:
-1. Usa SEMPRE i metadati disponibili per contestualizzare
-2. Cita con timestamp e autore
-3. Evidenzia sentiment significativi
-4. Identifica pattern nelle keywords
-5. Considera la lunghezza dei post per il peso
-6. Analizza le interazioni attraverso le citazioni
-7. Traccia il filo delle conversazioni basandoti sul formato delle citazioni"""
+ISTRUZIONI:
+1. Fornisci sempre prima una risposta diretta e concisa alla query
+2. Se la query richiede approfondimenti, aggiungi l'analisi dettagliata dopo
+3. Usa i metadati disponibili per supportare le tue conclusioni:
+   - Sentiment per il tono delle discussioni
+   - Keywords per i temi principali
+   - Timestamps per l'attualità
+   - Content length per il peso dei contributi
+4. Evidenzia sempre il livello di confidenza basato su:
+   - Numero di fonti concordanti
+   - Attualità delle informazioni
+   - Autorevolezza degli utenti
+   - Qualità dei metadati disponibili
+
+FORMATO RISPOSTA:
+---
+RISPOSTA DIRETTA:
+[Risposta concisa alla query]
+
+LIVELLO DI CONFIDENZA:
+[Alto/Medio/Basso] basato su:
+- Numero fonti: [X]
+- Range temporale: [data più vecchia - data più recente]
+- Sentiment medio: [valore]
+
+APPROFONDIMENTO (se richiesto):
+[Analisi dettagliata]
+---"""
 
 def setup_rag_chain(retriever):
     """Configura RAG chain con gestione errori migliorata."""
@@ -72,6 +108,10 @@ def setup_rag_chain(retriever):
 
             # Estrai e organizza i metadati
             posts_data = []
+            timestamps = []
+            all_keywords = []
+            sentiments = []
+            
             for doc in relevant_docs:
                 if not isinstance(doc.metadata, dict):
                     continue
@@ -86,18 +126,32 @@ def setup_rag_chain(retriever):
                     "thread_title": doc.metadata.get("thread_title", "Unknown Thread")
                 }
                 posts_data.append(post)
+                
+                # Raccogli dati per metriche
+                if post["time"] != "Unknown":
+                    timestamps.append(post["time"])
+                sentiments.append(post["sentiment"])
+                all_keywords.extend(post["keywords"])
             
             if not posts_data:
                 return {"result": "Ho trovato dei documenti ma non sono riuscito a processarli correttamente."}
             
-            # Ordina i post per timestamp se possibile
+            # Ordina i post per timestamp
             try:
                 posts_data.sort(key=lambda x: x["time"])
             except Exception as e:
                 logger.warning(f"Impossibile ordinare i post per timestamp: {e}")
             
+            # Calcola metriche
+            avg_sentiment = sum(sentiments) / len(sentiments) if sentiments else 0
+            time_range = f"{min(timestamps)} - {max(timestamps)}" if timestamps else "Unknown"
+            
             # Formatta il contesto con focus sui metadati
-            context = "Thread: " + posts_data[0]['thread_title'] + "\n\n"
+            context = f"Thread: {posts_data[0]['thread_title']}\n"
+            context += f"Periodo: {time_range}\n"
+            context += f"Sentiment medio: {avg_sentiment:.2f}\n"
+            context += f"Numero totale post: {len(posts_data)}\n\n"
+            
             context += "\n\n".join([
                 f"[{post['time']}] {post['author']}"
                 f"\nSentiment: {post['sentiment']}"
