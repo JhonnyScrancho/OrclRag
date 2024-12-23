@@ -37,19 +37,24 @@ def get_thread_id(thread):
     thread_key = f"{thread['url']}_{thread['scrape_time']}"
     return hashlib.md5(thread_key.encode()).hexdigest()
 
+
 def initialize_pinecone():
     """Inizializza connessione a Pinecone."""
     try:
+        print("DEBUG: Initializing Pinecone connection...")
         pc = Pinecone(api_key=st.secrets["PINECONE_API_KEY"])
         index = pc.Index(INDEX_NAME)
         
-        # Verifica che l'indice contenga dati
+        # Get and print index stats
         stats = index.describe_index_stats()
+        print(f"DEBUG: Pinecone index stats: {stats}")
+        
         if stats['total_vector_count'] == 0:
             st.warning("Il database è vuoto. Carica dei dati dalla tab 'Caricamento'.")
             
         return index
     except Exception as e:
+        print(f"ERROR in Pinecone initialization: {str(e)}")
         st.error(f"Errore connessione Pinecone: {str(e)}")
         return None
 
@@ -206,10 +211,15 @@ def verify_delete_permissions(index):
     except Exception as e:
         return False, f"Error verifying permissions: {str(e)}"
 
+
 def display_chat_interface(index, embeddings):
     """Display chat interface with improved styling."""
+    print("DEBUG: Entering display_chat_interface")
+    
     # Check if database is empty
     stats = index.describe_index_stats()
+    print(f"DEBUG: Index stats in chat interface: {stats}")
+    
     if stats['total_vector_count'] == 0:
         st.warning("Database is empty. Please load data from the Database tab.")
         return
@@ -229,18 +239,26 @@ def display_chat_interface(index, embeddings):
             st.markdown(prompt)
         
         try:
+            print("DEBUG: Creating SmartRetriever...")
             retriever = SmartRetriever(index, embeddings)
+            print("DEBUG: SmartRetriever created successfully")
+            
+            print("DEBUG: Setting up RAG chain...")
             chain = setup_rag_chain(retriever)
+            print("DEBUG: RAG chain setup complete")
             
             with st.chat_message("assistant"):
                 with st.spinner("Processing..."):
+                    print("DEBUG: Processing query:", prompt)
                     response = chain({"query": prompt})
+                    print("DEBUG: Got response from chain")
                     st.markdown(response["result"])
             
             st.session_state.messages.append(
                 {"role": "assistant", "content": response["result"]}
             )
         except Exception as e:
+            print(f"ERROR in chat processing: {str(e)}")
             st.error(f"Error generating response: {str(e)}")
     
     st.markdown('</div>', unsafe_allow_html=True)
@@ -335,6 +353,8 @@ def process_uploaded_file(uploaded_file, index, embeddings):
                 st.success(f"Processed {len(data)} threads and created {total_chunks} chunks")
 
 def main():
+    print("\nDEBUG: Starting main application...")
+    
     # Apply custom styles
     apply_custom_styles()
     
@@ -342,16 +362,23 @@ def main():
     initialize_session_state()
     
     # Render sidebar and get selected option
+    print("DEBUG: Rendering sidebar...")
     selected, uploaded_file = render_sidebar()
+    print(f"DEBUG: Selected option: {selected}")
     
     try:
+        print("DEBUG: Initializing Pinecone...")
         index = initialize_pinecone()
         if index is None:
+            print("ERROR: Failed to initialize Pinecone")
             st.stop()
         
+        print("DEBUG: Getting embeddings...")
         embeddings = get_embeddings()
+        print("DEBUG: Embeddings model initialized")
         
         if "Chat" in selected:
+            print("DEBUG: Entering Chat interface")
             st.markdown("## 💬 Chat")
             display_chat_interface(index, embeddings)
             
@@ -365,6 +392,7 @@ def main():
             render_database_cleanup(index)
             
     except Exception as e:
+        print(f"ERROR in main: {str(e)}")
         st.error(f"Application error: {str(e)}")
 
 if __name__ == "__main__":
