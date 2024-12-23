@@ -40,52 +40,39 @@ def get_thread_id(thread):
 def initialize_pinecone():
     """Inizializza connessione a Pinecone."""
     try:
-        from pinecone import Pinecone, ServerlessSpec
+        from pinecone import Pinecone
         st.write("Pinecone imported")
         
-        # Initialize pinecone v3 style
+        # Initialize pinecone
         pc = Pinecone(
             api_key=st.secrets["PINECONE_API_KEY"]
         )
         st.write("Pinecone instance created")
         
-        # Debug available indexes
-        indexes = pc.list_indexes()
-        st.write(f"Available indexes: {indexes}")
-        
-        # Get index
+        # Get index directly
         index = pc.Index(INDEX_NAME)
-        st.write("Got index")
-        st.write(f"Index type: {type(index)}")
-        st.write(f"Index methods: {dir(index)}")
         
-        # Try to use stats() instead of describe_index_stats()
+        # Try a simple query to verify the index is working
         try:
-            stats = index.describe_index_stats()
-            st.write("Stats method worked:", stats)
-        except AttributeError:
-            st.write("Trying alternative stats method...")
-            try:
-                # Try different methods that might exist
-                if hasattr(index, 'stats'):
-                    stats = index.stats()
-                    st.write("Alternative stats worked:", stats)
-                elif hasattr(index, 'describe'):
-                    stats = index.describe()
-                    st.write("Describe method worked:", stats)
-                else:
-                    st.write("No stats method found")
-                    stats = {"dimension": 768}  # Default fallback
-            except Exception as e:
-                st.error(f"Alternative stats failed: {str(e)}")
-                stats = {"dimension": 768}  # Default fallback
+            # Create a test vector with the correct dimension
+            test_vector = [0.0] * 768  # dimensione corretta dall'output precedente
+            test_vector[0] = 1.0
+            
+            # Try a simple query
+            results = index.query(
+                vector=test_vector,
+                top_k=1,
+                include_metadata=True
+            )
+            st.write("Query test successful")
+            
+        except Exception as e:
+            st.error(f"Query test failed: {str(e)}")
         
         return index
             
     except Exception as e:
         st.error(f"Pinecone initialization error: {str(e)}")
-        st.error(f"Error type: {type(e)}")
-        st.error(f"Error details: {dir(e) if hasattr(e, '__dict__') else 'No details available'}")
         return None
 
 def process_and_index_thread(thread, embeddings, index):
