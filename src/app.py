@@ -254,11 +254,25 @@ def display_database_view(index):
     # Gestione documenti
     if st.button("📥 Load Documents", use_container_width=True):
         with st.spinner("Loading documents..."):
-            documents = fetch_all_documents(index)
-            if documents:
-                # Preparazione dati per il DataFrame
+            try:
+                # Create a zero vector with correct dimension (768)
+                query_vector = [0.0] * 768
+                query_vector[0] = 1.0  # Set first element to 1.0
+                
+                # Query with the correct dimension vector
+                results = index.query(
+                    vector=query_vector,
+                    top_k=10000,
+                    include_metadata=True
+                )
+                
+                if not results.matches:
+                    st.info("No documents found in the database")
+                    return
+                    
+                # Process results as before
                 data = []
-                for doc in documents:
+                for doc in results.matches:
                     data.append({
                         'ID': doc.id,
                         'Thread': doc.metadata.get('thread_title', 'N/A'),
@@ -283,13 +297,11 @@ def display_database_view(index):
                         options=sorted(df['Author'].unique())
                     )
                 
-                # Applica filtri
                 if thread_filter:
                     df = df[df['Thread'].isin(thread_filter)]
                 if author_filter:
                     df = df[df['Author'].isin(author_filter)]
                 
-                # Visualizzazione dati
                 st.subheader("📋 Documents")
                 selected_rows = st.data_editor(
                     df,
@@ -298,15 +310,15 @@ def display_database_view(index):
                     num_rows="dynamic"
                 )
                 
-                # Mostra metadati dettagliati per la riga selezionata
                 if selected_rows is not None and len(selected_rows) > 0:
                     st.subheader("📝 Document Details")
-                    selected_doc = next(doc for doc in documents if doc.id == selected_rows.iloc[0]['ID'])
+                    selected_doc = next(doc for doc in results.matches if doc.id == selected_rows.iloc[0]['ID'])
                     if selected_doc:
                         with st.expander("Metadata", expanded=True):
                             st.json(selected_doc.metadata)
-            else:
-                st.info("No documents found in the database")
+                            
+            except Exception as e:
+                st.error(f"Error fetching documents: {str(e)}")
 
 def process_uploaded_file(uploaded_file, index, embeddings):
     """Process uploaded JSON file."""
