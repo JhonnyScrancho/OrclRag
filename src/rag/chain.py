@@ -9,86 +9,73 @@ logger = logging.getLogger(__name__)
 
 class ForumMetadataManager:
     def __init__(self):
-        self.system_prompt = """Sei un analista esperto di contenuti da forum. Il tuo compito è interpretare e aggregare discussioni per fornire insights su qualsiasi argomento richiesto, sfruttando sia il contenuto che i metadati disponibili.
+        self.system_prompt = """Sei un analista esperto di contenuti da forum. Il tuo compito è analizzare e fornire insight accurati basati sui thread del forum, considerando sempre tutti i posts disponibili. Assicurati di:
 
-ANALISI DATI:
-1. CONTESTUALE:
-   - Identifica il tema principale della richiesta
-   - Trova discussioni rilevanti
-   - Valuta la pertinenza delle informazioni
-   - Considera il contesto temporale (scrape_time vs post_time)
+1. CONTEGGIO E ANALISI:
+   - Conta sempre il numero esatto di threads e posts disponibili
+   - Verifica la concordanza tra posts trovati e dichiarati
+   - Analizza la cronologia completa della discussione
 
-2. QUALITATIVA:
-   - Consenso della community
-   - Esperienze dirette vs indirette
-   - Credibilità delle fonti
-   - Peso dei contributi (content_length)
-   - Evoluzione del sentiment nella discussione
+2. QUALITÀ DATI:
+   - Utilizza tutti i metadati disponibili (date, autori, sentiment)
+   - Verifica la completezza dei dati
+   - Segnala eventuali incongruenze nei dati
 
-3. CORRELAZIONI:
-   - Pattern di keywords ricorrenti
-   - Collegamenti tra discussioni
-   - Flusso delle conversazioni (citazioni)
-   - Interazioni tra utenti
-   - Evoluzione dei temi nel tempo
+3. RISPOSTA:
+   - Inizia SEMPRE specificando il numero esatto di threads e posts analizzati
+   - Fornisci il range temporale preciso della discussione
+   - Indica il livello di confidenza basato sulla completezza dei dati
+   - Procedi poi con l'analisi richiesta
 
-4. METRICHE:
-   - Engagement (total_posts, lunghezza risposte)
-   - Sentiment trend (-1 a +1)
-   - Densità keywords
-   - Autorevolezza utenti (frequenza, qualità interventi)
+4. FORMATO:
+---
+RISPOSTA DIRETTA:
+[Indicare SEMPRE: "Sono stati analizzati X threads contenenti Y posts."]
 
-RISPOSTE:
-1. SINTESI:
-   - Risposta diretta alla domanda
-   - Evidenze dai thread più rilevanti
-   - Supporto con metriche chiave
-   - Grado di affidabilità basato sui metadati
+LIVELLO DI CONFIDENZA:
+[Alto/Medio/Basso] basato su:
+- Numero fonti: [X threads, Y posts]
+- Range temporale: [prima data - ultima data]
+- Sentiment medio: [valore]
 
-2. APPROFONDIMENTO (se richiesto):
-   - Analisi temporale dei trend
-   - Pattern di sentiment e keywords
-   - Citazioni rilevanti con contesto
-   - Correlazioni tra discussioni
-   - Implicazioni pratiche"""
+APPROFONDIMENTO:
+[Analisi dettagliata richiesta]
+---"""
 
     def build_conversation_prompt(self, context: str, query: str) -> str:
+        # Estrai il conteggio dei threads e posts dal contesto
+        thread_count = context.count("THREAD:")
         return f"""QUERY: {query}
+
+ATTENZIONE: Il contesto contiene {thread_count} threads. Assicurati di analizzarli tutti.
 
 CONTESTO FORUM:
 {context}
 
-ISTRUZIONI:
-1. Fornisci sempre prima una risposta diretta e concisa alla query
-2. Se la query richiede approfondimenti, aggiungi l'analisi dettagliata dopo
-3. Usa i metadati disponibili per supportare le tue conclusioni:
-   - Sentiment per il tono delle discussioni
-   - Keywords per i temi principali
-   - Timestamps per l'attualità
-   - Content length per il peso dei contributi
-4. Evidenzia sempre il livello di confidenza basato su:
-   - Numero di fonti concordanti
-   - Attualità delle informazioni
-   - Autorevolezza degli utenti
-   - Qualità dei metadati disponibili
+RICHIESTE SPECIFICHE:
+1. Conta e riporta SEMPRE il numero esatto di threads e posts
+2. Verifica la concordanza tra il numero di posts trovati e dichiarati
+3. Includi sempre il range temporale completo
+4. Rispondi poi alla query specifica
 
-FORMATO RISPOSTA:
+FORMAT0 RISPOSTA RICHIESTO:
 ---
 RISPOSTA DIRETTA:
-[Risposta concisa alla query]
+Sono stati analizzati [X] threads contenenti [Y] posts.
+[Risposta alla query specifica]
 
 LIVELLO DI CONFIDENZA:
 [Alto/Medio/Basso] basato su:
-- Numero fonti: [X]
-- Range temporale: [data più vecchia - data più recente]
+- Numero fonti: [X] threads, [Y] posts
+- Range temporale: [prima data - ultima data]
 - Sentiment medio: [valore]
 
-APPROFONDIMENTO (se richiesto):
-[Analisi dettagliata]
+APPROFONDIMENTO:
+[Analisi dettagliata se richiesta]
 ---"""
 
 def setup_rag_chain(retriever):
-    """Configura RAG chain con gestione errori migliorata."""
+    """Configura RAG chain con gestione migliorata dei documenti."""
     prompt_manager = ForumMetadataManager()
     
     llm = ChatOpenAI(
@@ -106,79 +93,73 @@ def setup_rag_chain(retriever):
             if not relevant_docs:
                 return {"result": "Mi dispiace, non ho trovato informazioni rilevanti per rispondere alla tua domanda."}
 
-            # Strutture dati per l'analisi
-            threads_data = {}  # Per raggruppare i post per thread
-            all_sentiments = []
+            # Struttura dati per l'analisi
+            threads_data = {}
             all_timestamps = []
+            all_sentiments = []
             
-            # Prima passata: raggruppamento per thread e raccolta metadati
+            # Primo passaggio: raggruppa per thread e raccolta dati
             for doc in relevant_docs:
-                if not isinstance(doc.metadata, dict):
-                    continue
-                    
-                thread_id = doc.metadata.get("thread_id", "unknown")
+                meta = doc.metadata
+                thread_id = meta.get("thread_id", "unknown")
+                
                 if thread_id not in threads_data:
                     threads_data[thread_id] = {
-                        "title": doc.metadata.get("thread_title", "Unknown Thread"),
-                        "total_posts": doc.metadata.get("total_posts", 0),
-                        "scrape_time": doc.metadata.get("scrape_time", "Unknown"),
+                        "title": meta.get("thread_title", "Unknown Thread"),
+                        "total_posts": meta.get("total_posts", 0),
+                        "declared_posts": meta.get("declared_posts", 0),
+                        "scrape_time": meta.get("scrape_time", "Unknown"),
                         "posts": []
                     }
                 
                 # Aggiungi il post ai dati del thread
-                post_data = {
-                    "post_id": doc.metadata.get("post_id", "unknown"),
-                    "author": doc.metadata.get("author", "Unknown"),
-                    "time": doc.metadata.get("post_time", "Unknown"),
+                post_time = meta.get("post_time", "Unknown")
+                sentiment = meta.get("sentiment", 0)
+                
+                threads_data[thread_id]["posts"].append({
+                    "post_id": meta.get("post_id", "unknown"),
+                    "author": meta.get("author", "Unknown"),
+                    "time": post_time,
                     "content": doc.page_content,
-                    "sentiment": doc.metadata.get("sentiment", 0),
-                    "keywords": doc.metadata.get("keywords", []),
-                    "content_length": len(doc.page_content) if doc.page_content else 0
-                }
+                    "sentiment": sentiment,
+                    "keywords": meta.get("keywords", [])
+                })
                 
-                threads_data[thread_id]["posts"].append(post_data)
-                
-                # Raccogli dati per metriche
-                if post_data["time"] != "Unknown":
-                    all_timestamps.append(post_data["time"])
-                if isinstance(post_data["sentiment"], (int, float)):
-                    all_sentiments.append(post_data["sentiment"])
-
-            # Calcolo metriche globali
-            total_threads = len(threads_data)
+                if post_time != "Unknown":
+                    all_timestamps.append(post_time)
+                if isinstance(sentiment, (int, float)):
+                    all_sentiments.append(sentiment)
+            
+            # Prepara il contesto strutturato
+            context = "STATISTICHE GLOBALI:\n"
+            context += f"Threads analizzati: {len(threads_data)}\n"
             total_posts = sum(len(thread["posts"]) for thread in threads_data.values())
-            thread_declared_posts = sum(thread.get("total_posts", 0) for thread in threads_data.values())
+            total_declared = sum(thread["declared_posts"] for thread in threads_data.values())
+            context += f"Posts trovati: {total_posts}\n"
+            context += f"Posts dichiarati nei metadata: {total_declared}\n"
+            
+            if all_timestamps:
+                context += f"Range temporale: {min(all_timestamps)} - {max(all_timestamps)}\n"
+            
             avg_sentiment = sum(all_sentiments) / len(all_sentiments) if all_sentiments else 0
-            time_range = f"{min(all_timestamps)} - {max(all_timestamps)}" if all_timestamps else "Unknown"
-
-            # Formatta il contesto
-            context = f"""STATISTICHE GLOBALI:
-    Threads analizzati: {total_threads}
-    Posts trovati: {total_posts}
-    Posts dichiarati nei metadata: {thread_declared_posts}
-    Range temporale: {time_range}
-    Sentiment medio: {avg_sentiment:.2f}
-
-    DETTAGLIO THREADS:"""
-
+            context += f"Sentiment medio: {avg_sentiment:.2f}\n\n"
+            
             # Aggiungi dettagli per ogni thread
-            for thread_id, thread_data in threads_data.items():
-                context += f"\n\nTHREAD: {thread_data['title']}"
-                context += f"\nTotal posts: {thread_data['total_posts']}"
-                context += f"\nScrape time: {thread_data['scrape_time']}"
-                context += "\n\nPOSTS:"
+            for thread_id, thread in threads_data.items():
+                context += f"THREAD: {thread['title']}\n"
+                context += f"Posts trovati: {len(thread['posts'])}\n"
+                context += f"Posts dichiarati: {thread['declared_posts']}\n"
                 
-                # Ordina i post per timestamp
-                thread_data["posts"].sort(key=lambda x: x["time"])
+                # Ordina i posts per timestamp
+                thread["posts"].sort(key=lambda x: x["time"])
                 
-                for post in thread_data["posts"]:
-                    context += f"\n\n[{post['time']}] {post['author']}"
-                    context += f"\nSentiment: {post['sentiment']}"
-                    context += f"\nKeywords: {', '.join(post['keywords'])}"
-                    context += f"\nLunghezza: {post['content_length']}"
-                    context += f"\nContenuto:\n{post['content']}"
-
-            # Preparazione del prompt
+                for post in thread["posts"]:
+                    context += f"\n[{post['time']}] {post['author']}\n"
+                    context += f"Sentiment: {post['sentiment']}\n"
+                    context += f"Keywords: {', '.join(post['keywords'])}\n"
+                    context += f"Content:\n{post['content']}\n"
+            
+            # Crea il prompt finale
             conversation_prompt = prompt_manager.build_conversation_prompt(context, query)
             
             messages = [
@@ -190,7 +171,7 @@ def setup_rag_chain(retriever):
             response = llm.invoke(messages)
             if not response or not hasattr(response, 'content'):
                 return {"result": "Mi dispiace, ho avuto un problema nel generare una risposta."}
-                
+            
             return {"result": response.content}
             
         except Exception as e:
