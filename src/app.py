@@ -40,39 +40,25 @@ def get_thread_id(thread):
 def initialize_pinecone():
     """Inizializza connessione a Pinecone."""
     try:
-        from pinecone import Pinecone
-        st.write("Pinecone imported")
+        import pinecone.grpc
+        st.write("Pinecone GRPC imported")
         
-        # Initialize pinecone
-        pc = Pinecone(
+        # Initialize pinecone using the GRPC client
+        pc = pinecone.grpc.PineconeClient(
             api_key=st.secrets["PINECONE_API_KEY"]
         )
-        st.write("Pinecone instance created")
+        st.write("Pinecone client created")
         
-        # Get index directly
-        index = pc.Index(INDEX_NAME)
-        
-        # Try a simple query to verify the index is working
-        try:
-            # Create a test vector with the correct dimension
-            test_vector = [0.0] * 768  # dimensione corretta dall'output precedente
-            test_vector[0] = 1.0
-            
-            # Try a simple query
-            results = index.query(
-                vector=test_vector,
-                top_k=1,
-                include_metadata=True
-            )
-            st.write("Query test successful")
-            
-        except Exception as e:
-            st.error(f"Query test failed: {str(e)}")
+        # Get index
+        index = pc.get_index(INDEX_NAME)
+        st.write("Got index successfully")
         
         return index
             
     except Exception as e:
         st.error(f"Pinecone initialization error: {str(e)}")
+        st.write(f"Error type: {type(e)}")
+        st.write(f"Module path: {pinecone.grpc.__file__}")
         return None
 
 def process_and_index_thread(thread, embeddings, index):
