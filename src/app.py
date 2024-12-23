@@ -152,17 +152,27 @@ def render_database_cleanup(index):
                 st.error("Full error:", exception=e)
 
 def fetch_all_documents(index):
-    """Fetch all documents from index with proper error handling"""
+    """Fetch all documents from index with debug info."""
     try:
+        st.write("Creating query vector...")
+        # Create a normalized vector
+        query_vector = [0.0] * 768
+        query_vector[0] = 1.0
+        
+        st.write(f"Vector length: {len(query_vector)}")
+        st.write(f"First few elements: {query_vector[:5]}")
+        
+        st.write("Sending query to Pinecone...")
         response = index.query(
-            vector=[1.0] + [0.0] * 1535,  # Vector with first element non-zero
+            vector=query_vector,
             top_k=10000,
             include_metadata=True
         )
+        
         return response.matches if response and hasattr(response, 'matches') else []
     except Exception as e:
-        st.error(f"Error fetching documents: {str(e)}")
-        return []
+        st.error(f"Error in fetch_all_documents: {str(e)}")
+        raise
 
 def integrate_database_cleanup(index):
     """Integration point for the database cleanup functionality"""
@@ -270,6 +280,8 @@ def display_database_view(index):
     # Statistiche generali
     try:
         stats = index.describe_index_stats()
+        st.write("Index stats:", stats)  # Aggiungiamo questo
+        
         col1, col2 = st.columns(2)
         with col1:
             st.metric("Total Documents", stats['total_vector_count'])
@@ -281,12 +293,17 @@ def display_database_view(index):
 
     # Gestione documenti
     if st.button("📥 Load Documents", use_container_width=True):
-        with st.spinner("Loading documents..."):
+        try:
+            st.write("Attempting to fetch documents...")
+            # Usa il nuovo retriever con debug
             documents = fetch_all_documents(index)
+            st.write(f"Retrieved {len(documents)} documents")
+            
             if documents:
-                # Preparazione dati per il DataFrame
+                # Display dei dati
                 data = []
                 for doc in documents:
+                    st.write("Document metadata:", doc.metadata)  # Debug
                     data.append({
                         'ID': doc.id,
                         'Thread': doc.metadata.get('thread_title', 'N/A'),
@@ -296,45 +313,14 @@ def display_database_view(index):
                     })
                 
                 df = pd.DataFrame(data)
-                
-                # Filtri
-                st.subheader("🔍 Filters")
-                col1, col2 = st.columns(2)
-                with col1:
-                    thread_filter = st.multiselect(
-                        "Filter by Thread",
-                        options=sorted(df['Thread'].unique())
-                    )
-                with col2:
-                    author_filter = st.multiselect(
-                        "Filter by Author",
-                        options=sorted(df['Author'].unique())
-                    )
-                
-                # Applica filtri
-                if thread_filter:
-                    df = df[df['Thread'].isin(thread_filter)]
-                if author_filter:
-                    df = df[df['Author'].isin(author_filter)]
-                
-                # Visualizzazione dati
-                st.subheader("📋 Documents")
-                selected_rows = st.data_editor(
-                    df,
-                    hide_index=True,
-                    use_container_width=True,
-                    num_rows="dynamic"
-                )
-                
-                # Mostra metadati dettagliati per la riga selezionata
-                if selected_rows is not None and len(selected_rows) > 0:
-                    st.subheader("📝 Document Details")
-                    selected_doc = next(doc for doc in documents if doc.id == selected_rows.iloc[0]['ID'])
-                    if selected_doc:
-                        with st.expander("Metadata", expanded=True):
-                            st.json(selected_doc.metadata)
+                st.dataframe(df)
             else:
                 st.info("No documents found in the database")
+                
+        except Exception as e:
+            st.error("Error in display_database_view:")
+            st.error(f"Error type: {type(e)}")
+            st.error(f"Error message: {str(e)}")
 
 def process_uploaded_file(uploaded_file, index, embeddings):
     """Process uploaded JSON file."""
