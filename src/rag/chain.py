@@ -1,7 +1,9 @@
 from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_openai import ChatOpenAI
 import streamlit as st
 import logging
 from datetime import datetime
+from config import LLM_MODEL
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +55,12 @@ def setup_rag_chain(retriever):
     """Configura RAG chain focalizzata sui metadati."""
     prompt_manager = ForumMetadataManager()
     
+    llm = ChatOpenAI(
+        model_name=LLM_MODEL,
+        temperature=0.3,
+        api_key=st.secrets["OPENAI_API_KEY"]
+    )
+    
     def get_response(query_input):
         try:
             query = query_input.get("query", "") if isinstance(query_input, dict) else query_input
@@ -96,7 +104,8 @@ def setup_rag_chain(retriever):
                 HumanMessage(content=conversation_prompt)
             ]
             
-            return {"result": messages}
+            response = llm.invoke(messages)
+            return {"result": response.content}
             
         except Exception as e:
             logger.error(f"Error in RAG chain: {str(e)}")
