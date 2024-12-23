@@ -7,19 +7,23 @@ from datetime import datetime
 from config import EMBEDDING_DIMENSION
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 class SmartRetriever:
     def __init__(self, index, embeddings):
         self.index = index
         self.embeddings = embeddings
         self.MAX_DOCUMENTS = 10000
+        logger.debug(f"SmartRetriever initialized with EMBEDDING_DIMENSION: {EMBEDDING_DIMENSION}")
 
     def get_all_documents(self) -> List[Any]:
         """Recupera tutti i documenti dall'indice."""
         try:
-            # Create a vector with correct dimension (768)
-            query_vector = [0.0] * 768
+            # Create a vector with correct dimension
+            query_vector = [0.0] * EMBEDDING_DIMENSION
             query_vector[0] = 1.0
+            
+            logger.debug(f"get_all_documents - query vector dimension: {len(query_vector)}")
             
             results = self.index.query(
                 vector=query_vector,
@@ -51,6 +55,7 @@ class SmartRetriever:
         try:
             # Genera l'embedding della query
             query_embedding = self.embeddings.embed_query(query)
+            logger.debug(f"get_relevant_documents - query embedding dimension: {len(query_embedding)}")
             
             # Cerca i documenti più simili
             results = self.index.query(
@@ -85,6 +90,7 @@ class SmartRetriever:
             
         except Exception as e:
             logger.error(f"Error in retrieval: {str(e)}")
+            logger.exception("Full traceback:")  # Questo aggiungerà il traceback completo
             return [Document(
                 page_content=f"Errore durante il recupero dei documenti: {str(e)}",
                 metadata={"type": "error"}
