@@ -43,45 +43,27 @@ def initialize_pinecone():
         # Debug the API key (only length for security)
         api_key = st.secrets["PINECONE_API_KEY"]
         st.write(f"API key length: {len(api_key)}")
-        st.write(f"API key type: {type(api_key)}")
         
         # Import check
-        try:
-            from pinecone import Pinecone
-            st.write("Pinecone imported successfully")
-        except ImportError as e:
-            st.error(f"Error importing Pinecone: {str(e)}")
-            return None
+        from pinecone import Pinecone
+        st.write("Pinecone imported successfully")
         
         # Initialize with debug
-        try:
-            pc = Pinecone(api_key=api_key)
-            st.write(f"Pinecone instance type: {type(pc)}")
-            st.write(f"Pinecone instance dir: {dir(pc)}")
-            if pc is None:
-                st.error("Pinecone instance is None!")
-                return None
-        except Exception as e:
-            st.error(f"Error initializing Pinecone: {str(e)}")
-            return None
-            
-        try:
-            indexes = pc.list_indexes()
-            st.write("Available indexes:", indexes)
-        except Exception as e:
-            st.error(f"Error listing indexes: {str(e)}")
-            st.error(f"Error type: {type(e)}")
-            return None
-            
-        if INDEX_NAME not in indexes:
-            st.error(f"Index {INDEX_NAME} not found!")
-            return None
-            
+        pc = Pinecone(api_key=api_key)
+        st.write(f"Pinecone instance created")
+        
+        # Try direct index access instead of listing
         try:
             index = pc.Index(INDEX_NAME)
+            st.write("Index accessed directly")
+            
+            # Verify index is working
+            stats = index.describe_index_stats()
+            st.write("Index stats:", stats)
             return index
+            
         except Exception as e:
-            st.error(f"Error getting index: {str(e)}")
+            st.error(f"Error accessing index directly: {str(e)}")
             return None
             
     except Exception as e:
