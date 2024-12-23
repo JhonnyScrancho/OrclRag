@@ -40,34 +40,30 @@ def get_thread_id(thread):
 def initialize_pinecone():
     """Inizializza connessione a Pinecone."""
     try:
-        # Debug the API key (only length for security)
-        api_key = st.secrets["PINECONE_API_KEY"]
-        st.write(f"API key length: {len(api_key)}")
+        import pinecone
+        st.write("Pinecone imported")
         
-        # Import check
-        from pinecone import Pinecone
-        st.write("Pinecone imported successfully")
+        # Initialize pinecone
+        pinecone.init(api_key=st.secrets["PINECONE_API_KEY"])
+        st.write("Pinecone initialized")
         
-        # Initialize with debug
-        pc = Pinecone(api_key=api_key)
-        st.write(f"Pinecone instance created")
-        
-        # Try direct index access instead of listing
-        try:
-            index = pc.Index(INDEX_NAME)
-            st.write("Index accessed directly")
-            
-            # Verify index is working
-            stats = index.describe_index_stats()
-            st.write("Index stats:", stats)
-            return index
-            
-        except Exception as e:
-            st.error(f"Error accessing index directly: {str(e)}")
+        # Get the index
+        if INDEX_NAME not in pinecone.list_indexes():
+            st.error(f"Index {INDEX_NAME} not found!")
             return None
+            
+        index = pinecone.Index(INDEX_NAME)
+        st.write("Got index")
+        
+        # Test the index
+        stats = index.describe_index_stats()
+        st.write("Index stats:", stats)
+        
+        return index
             
     except Exception as e:
         st.error(f"Pinecone initialization error: {str(e)}")
+        st.error(f"Error type: {type(e)}")
         return None
 
 def process_and_index_thread(thread, embeddings, index):
