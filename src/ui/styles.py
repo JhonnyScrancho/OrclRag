@@ -208,7 +208,7 @@ def render_sidebar():
         st.sidebar.markdown(f'''
             <style>
                 div[data-testid="stHorizontalBlock"] button[kind="{page}"] {{
-                    background: {f"white !important" if button_style == "active" else "var(--primary-color)"};
+                    background: {f"transparent !important" if button_style == "active" else "var(--primary-color)"};
                     color: {f"black !important" if button_style == "active" else "white"};
                     border: {f"2px solid var(--primary-color) !important" if button_style == "active" else "none"};
                 }}
