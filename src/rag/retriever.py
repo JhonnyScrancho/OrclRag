@@ -4,7 +4,6 @@ from typing import List, Dict, Any
 from langchain_core.documents import Document
 import logging
 from datetime import datetime
-from config import EMBEDDING_DIMENSION
 
 logger = logging.getLogger(__name__)
 
