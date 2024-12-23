@@ -13,13 +13,13 @@ class SmartRetriever:
         self.index = index
         self.embeddings = embeddings
         self.MAX_DOCUMENTS = 10000
-        self.EMBEDDING_DIMENSION = 768  # Set explicitly to match index dimension
+        self.EMBEDDING_DIMENSION = EMBEDDING_DIMENSION   # Set explicitly to match index dimension
 
     def get_all_documents(self) -> List[Any]:
         """Retrieve all documents from the index using a properly dimensioned query vector."""
         try:
             # Create a zero vector with correct dimension
-            query_vector = [0.0] * self.EMBEDDING_DIMENSION
+            query_vector = [0.0] * EMBEDDING_DIMENSION
             # Set first element to 1.0 to ensure non-zero vector
             query_vector[0] = 1.0
             
