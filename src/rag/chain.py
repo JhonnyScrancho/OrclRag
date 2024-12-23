@@ -52,7 +52,7 @@ LINEE GUIDA:
 7. Traccia il filo delle conversazioni basandoti sul formato delle citazioni"""
 
 def setup_rag_chain(retriever):
-    """Configura RAG chain focalizzata sui metadati."""
+    """Configura RAG chain con gestione errori migliorata."""
     prompt_manager = ForumMetadataManager()
     
     llm = ChatOpenAI(
@@ -65,38 +65,49 @@ def setup_rag_chain(retriever):
         try:
             query = query_input.get("query", "") if isinstance(query_input, dict) else query_input
             
-            docs = retriever.get_all_documents()
-            if not docs:
-                return {"result": "Dati insufficienti per l'analisi."}
+            # Recupera i documenti rilevanti
+            relevant_docs = retriever.get_relevant_documents(query)
+            if not relevant_docs:
+                return {"result": "Mi dispiace, non ho trovato informazioni rilevanti per rispondere alla tua domanda."}
 
             # Estrai e organizza i metadati
             posts_data = []
-            for doc in docs:
-                metadata = doc.metadata
+            for doc in relevant_docs:
+                if not isinstance(doc.metadata, dict):
+                    continue
+                    
                 post = {
-                    "author": metadata.get("author", "Unknown"),
-                    "time": metadata.get("post_time", "Unknown"),
-                    "content": metadata.get("text", ""),
-                    "sentiment": metadata.get("sentiment", 0),
-                    "keywords": metadata.get("keywords", []),
-                    "content_length": metadata.get("content_length", 0),
-                    "thread_title": metadata.get("thread_title", "Unknown Thread")
+                    "author": doc.metadata.get("author", "Unknown"),
+                    "time": doc.metadata.get("post_time", "Unknown"),
+                    "content": doc.page_content,
+                    "sentiment": doc.metadata.get("sentiment", 0),
+                    "keywords": doc.metadata.get("keywords", []),
+                    "content_length": len(doc.page_content) if doc.page_content else 0,
+                    "thread_title": doc.metadata.get("thread_title", "Unknown Thread")
                 }
                 posts_data.append(post)
             
-            # Ordina per timestamp
-            posts_data.sort(key=lambda x: x["time"])
+            if not posts_data:
+                return {"result": "Ho trovato dei documenti ma non sono riuscito a processarli correttamente."}
+            
+            # Ordina i post per timestamp se possibile
+            try:
+                posts_data.sort(key=lambda x: x["time"])
+            except Exception as e:
+                logger.warning(f"Impossibile ordinare i post per timestamp: {e}")
             
             # Formatta il contesto con focus sui metadati
-            context = f"Thread: {posts_data[0]['thread_title']}\n\n" + "\n\n".join([
+            context = "Thread: " + posts_data[0]['thread_title'] + "\n\n"
+            context += "\n\n".join([
                 f"[{post['time']}] {post['author']}"
                 f"\nSentiment: {post['sentiment']}"
-                f"\nKeywords: {', '.join(post['keywords'])}"
+                f"\nKeywords: {', '.join(post['keywords']) if isinstance(post['keywords'], list) else ''}"
                 f"\nLunghezza: {post['content_length']}"
                 f"\nContenuto:\n{post['content']}"
                 for post in posts_data
             ])
             
+            # Preparazione del prompt
             conversation_prompt = prompt_manager.build_conversation_prompt(context, query)
             
             messages = [
@@ -104,11 +115,15 @@ def setup_rag_chain(retriever):
                 HumanMessage(content=conversation_prompt)
             ]
             
+            # Genera la risposta
             response = llm.invoke(messages)
+            if not response or not hasattr(response, 'content'):
+                return {"result": "Mi dispiace, ho avuto un problema nel generare una risposta."}
+                
             return {"result": response.content}
             
         except Exception as e:
-            logger.error(f"Error in RAG chain: {str(e)}")
-            return {"result": f"Errore nell'elaborazione: {str(e)}"}
+            logger.error(f"Errore nella RAG chain: {str(e)}")
+            return {"result": f"Si è verificato un errore durante l'elaborazione della tua richiesta: {str(e)}"}
     
     return get_response
