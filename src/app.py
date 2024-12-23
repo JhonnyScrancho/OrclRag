@@ -452,12 +452,46 @@ def display_chat_interface(index, embeddings):
     
     # Display chat messages with unique keys for each message
     for msg_idx, message in enumerate(st.session_state.messages):
-        with st.chat_message(message["role"], key=f"chat_msg_{msg_idx}"):  # Unique key per chat message
+        with st.chat_message(message["role"], key=f"chat_msg_{msg_idx}"):
             st.markdown(message["content"])
             
             # Mostra feedback UI solo per risposte dell'assistente
             if message["role"] == "assistant":
-                display_feedback_ui(msg_idx)
+                with st.expander("📊 Fornisci Feedback", expanded=False):
+                    col1, col2 = st.columns([3, 1])
+                    with col1:
+                        feedback = st.slider(
+                            "Quanto è stata utile la risposta?",
+                            min_value=1,
+                            max_value=5,
+                            value=3,
+                            help="1 = Per niente utile, 5 = Molto utile",
+                            key=f"feedback_slider_{msg_idx}"
+                        )
+                        comment = st.text_area(
+                            "Commento (opzionale)",
+                            key=f"feedback_comment_{msg_idx}",
+                            max_chars=500
+                        )
+                    with col2:
+                        if st.button("Invia Feedback", key=f"feedback_btn_{msg_idx}"):
+                            st.session_state.metrics_manager.add_feedback(
+                                msg_idx,
+                                feedback,
+                                comment
+                            )
+                            st.success("Grazie per il tuo feedback!")
+                
+                # Mostra metriche di risposta se disponibili
+                if "metrics" in message:
+                    with st.expander("📊 Metriche Risposta", expanded=False):
+                        col1, col2, col3 = st.columns(3)
+                        with col1:
+                            st.metric("Tempo Recupero", f"{message['metrics']['retrieval_time']:.2f}s")
+                        with col2:
+                            st.metric("Tempo Generazione", f"{message['metrics']['generation_time']:.2f}s")
+                        with col3:
+                            st.metric("Tempo Totale", f"{message['metrics']['total_time']:.2f}s")
     
     # Chat input
     if prompt := st.chat_input("Dimmi figliuolo..."):
@@ -473,7 +507,7 @@ def display_chat_interface(index, embeddings):
             chain = setup_rag_chain(retriever)
             
             with st.chat_message("assistant"):
-                with st.spinner("Processing..."):
+                with st.spinner("Elaborazione in corso..."):
                     # Track retrieval time
                     retrieval_start = time.time()
                     relevant_docs = retriever.get_relevant_documents(prompt)
@@ -508,29 +542,19 @@ def display_chat_interface(index, embeddings):
                         token_count
                     )
             
-            # Add response to message history
-            st.session_state.messages.append({
-                "role": "assistant",
-                "content": response["result"],
-                "metrics": {
-                    "retrieval_time": retrieval_time,
-                    "generation_time": generation_time,
-                    "total_time": total_time
-                }
-            })
-            
-            # Show metrics in expander
-            with st.expander("📊 Response Metrics", expanded=False):
-                col1, col2, col3 = st.columns(3)
-                with col1:
-                    st.metric("Retrieval Time", f"{retrieval_time:.2f}s")
-                with col2:
-                    st.metric("Generation Time", f"{generation_time:.2f}s")
-                with col3:
-                    st.metric("Total Time", f"{total_time:.2f}s")
+                    # Add response to message history with metrics
+                    st.session_state.messages.append({
+                        "role": "assistant",
+                        "content": response["result"],
+                        "metrics": {
+                            "retrieval_time": retrieval_time,
+                            "generation_time": generation_time,
+                            "total_time": total_time
+                        }
+                    })
             
         except Exception as e:
-            st.error(f"Error generating response: {str(e)}")
+            st.error(f"Errore durante la generazione della risposta: {str(e)}")
             logger.error(f"Chat error: {str(e)}")
             
             # Track error in metrics
@@ -540,12 +564,12 @@ def display_chat_interface(index, embeddings):
     
     # Display session metrics in sidebar
     with st.sidebar:
-        st.markdown("### 📊 Session Stats")
+        st.markdown("### 📊 Statistiche Sessione")
         metrics = st.session_state.metrics_manager.get_summary_metrics()
-        st.metric("Queries this session", metrics['total_queries'])
-        st.metric("Avg Response Time", f"{metrics['avg_response_time']:.2f}s")
+        st.metric("Query in questa sessione", metrics['total_queries'])
+        st.metric("Tempo Risposta Medio", f"{metrics['avg_response_time']:.2f}s")
         if metrics['avg_feedback_score'] > 0:
-            st.metric("Feedback Score", f"{metrics['avg_feedback_score']:.1f}/5")
+            st.metric("Punteggio Feedback", f"{metrics['avg_feedback_score']:.1f}/5")
 
 def display_database_view(index):
     """Visualizzazione e gestione del database."""
