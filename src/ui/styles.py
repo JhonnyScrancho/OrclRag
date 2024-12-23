@@ -1,4 +1,6 @@
 import streamlit as st
+from sentence_transformers import SentenceTransformer
+from pinecone import Pinecone
 
 def apply_custom_styles():
     """Apply custom styles to the Streamlit app."""
@@ -148,6 +150,46 @@ def apply_custom_styles():
         </style>
     """, unsafe_allow_html=True)
 
+def render_test_section(sidebar):
+    """Aggiunge una sezione di test nella sidebar."""
+    sidebar.markdown("---")
+    sidebar.markdown("### 🧪 Test Debug")
+    
+    def test_embedding():
+        with sidebar:
+            with st.expander("Test Results", expanded=True):
+                # 1. Carica il modello
+                st.write("1. Caricamento modello...")
+                model = SentenceTransformer("paraphrase-multilingual-mpnet-base-v2")
+                
+                # 2. Crea un embedding di test
+                test_text = "Questo è un test"
+                st.write("2. Creazione embedding...")
+                embedding = model.encode(test_text, normalize_embeddings=True)
+                
+                # 3. Stampa la dimensione
+                st.write(f"3. Dimensione embedding: {len(embedding)}")
+                
+                # 4. Prova a inserire in Pinecone
+                st.write("4. Test Pinecone...")
+                pc = Pinecone(api_key=st.secrets["PINECONE_API_KEY"])
+                index = pc.Index("forum-index")
+                
+                try:
+                    index.upsert(
+                        vectors=[{
+                            "id": "test",
+                            "values": embedding.tolist(),
+                            "metadata": {"test": True}
+                        }]
+                    )
+                    st.success("✅ Test completato con successo!")
+                except Exception as e:
+                    st.error(f"❌ Errore: {str(e)}")
+
+    if sidebar.button("🧪 Esegui Test Debug", use_container_width=True):
+        test_embedding()
+
 def render_sidebar():
     """Render the sidebar with logo and navigation."""
     # Inizializza la session state se non esiste
@@ -158,7 +200,7 @@ def render_sidebar():
         st.session_state.current_page = page
         st.rerun()
     
-    with st.sidebar:
+    with st.sidebar as sidebar:
         # Logo con bordo circolare
         st.markdown('<div class="img-container">', unsafe_allow_html=True)
         st.image("src/img/logo.png", use_column_width=True)
@@ -186,7 +228,7 @@ def render_sidebar():
             if st.button(page, key=f"nav_{page}", use_container_width=True, type="primary", kwargs={"kind": page}):
                 nav_to(page)
         
-        # File uploader section in sidebar
+        # File uploader section
         st.markdown("---")
         st.markdown("### Carica JSON")
         uploaded_file = st.file_uploader(
@@ -194,6 +236,9 @@ def render_sidebar():
             type=['json'],
             help="Limit 200MB per file • JSON"
         )
+        
+        # Aggiungi la sezione di test
+        render_test_section(sidebar)
         
         # Lo stile esistente viene mantenuto
         st.markdown("""
@@ -229,5 +274,4 @@ def render_sidebar():
             </style>
         """, unsafe_allow_html=True)
         
-        # Ritorniamo la pagina corrente e il file caricato
         return st.session_state.current_page, uploaded_file
