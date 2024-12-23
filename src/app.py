@@ -452,7 +452,6 @@ def display_chat_interface(index, embeddings):
     
     # Display chat messages
     for msg_idx, message in enumerate(st.session_state.messages):
-        # Create unique container for each message
         message_container = st.container()
         with message_container:
             with st.chat_message(message["role"]):
@@ -515,6 +514,25 @@ def display_chat_interface(index, embeddings):
                     retrieval_start = time.time()
                     relevant_docs = retriever.get_relevant_documents(prompt)
                     retrieval_time = time.time() - retrieval_start
+                    
+                    # Debug: Show thread stats
+                    with st.expander("📊 Debug: Thread Statistics", expanded=False):
+                        thread_stats = {}
+                        # Conta i posts per thread
+                        for doc in relevant_docs:
+                            thread_id = doc.metadata.get("thread_id")
+                            if thread_id not in thread_stats:
+                                thread_stats[thread_id] = {
+                                    "title": doc.metadata.get("thread_title"),
+                                    "posts": 0,
+                                    "declared_posts": doc.metadata.get("total_posts")
+                                }
+                            thread_stats[thread_id]["posts"] += 1
+
+                        # Mostra le statistiche
+                        for thread_id, stats in thread_stats.items():
+                            st.write(f"Thread: {stats['title']}")
+                            st.write(f"Posts trovati: {stats['posts']}/{stats['declared_posts']}")
                     
                     # Track response generation time
                     generation_start = time.time()

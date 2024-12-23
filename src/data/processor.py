@@ -2,6 +2,9 @@ from typing import List, Dict
 from datetime import datetime
 import hashlib
 import re
+import logging
+
+logger = logging.getLogger(__name__)
 
 def generate_post_id(post: Dict, thread_id: str) -> str:
     """Genera un ID unico per ogni post basato sul suo contenuto e timestamp."""
@@ -84,26 +87,43 @@ def process_thread(thread: Dict) -> List[str]:
     thread_id = get_thread_id(thread)
     processed_posts = []
     
+    # Verifica e log del numero di posts
+    actual_posts = len(thread['posts'])
+    declared_posts = thread.get('metadata', {}).get('total_posts', 0)
+    logger.info(f"Processing thread {thread_id}: {actual_posts} actual posts, {declared_posts} declared posts")
+    
     # Metadati comuni del thread
     thread_metadata = {
         "thread_id": thread_id,
         "thread_title": thread['title'],
         "url": thread['url'],
         "scrape_time": thread['scrape_time'],
-        "total_posts": len(thread['posts']),
-        "is_thread": True  # Flag per identificare che questo è un thread
+        "total_posts": actual_posts,  # Usa il numero effettivo di posts
+        "declared_posts": declared_posts,  # Mantieni anche il numero dichiarato
+        "is_thread": True
     }
     
     # Aggiungi eventuali metadati aggiuntivi dal thread
     if 'metadata' in thread:
         thread_metadata.update(thread['metadata'])
     
-    # Processa ogni post
-    for post in thread['posts']:
-        metadata = extract_post_content(post, thread_id)
-        metadata.update(thread_metadata)
-        metadata["is_post"] = True  # Flag per identificare che questo è un post
-        processed_posts.append(metadata["text"])
+    # Processa ogni post con logging dettagliato
+    for i, post in enumerate(thread['posts']):
+        try:
+            metadata = extract_post_content(post, thread_id)
+            metadata.update(thread_metadata)
+            metadata["is_post"] = True
+            metadata["post_index"] = i + 1  # Aggiungi indice del post
+            processed_posts.append(metadata["text"])
+            logger.info(f"Processed post {i+1}/{actual_posts} in thread {thread_id}")
+        except Exception as e:
+            logger.error(f"Error processing post {i+1} in thread {thread_id}: {str(e)}")
+            continue
+    
+    # Verifica finale
+    processed_count = len(processed_posts)
+    if processed_count != actual_posts:
+        logger.warning(f"Mismatch in thread {thread_id}: processed {processed_count} posts but had {actual_posts}")
     
     return processed_posts
 
