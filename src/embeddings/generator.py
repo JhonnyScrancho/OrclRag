@@ -9,9 +9,11 @@ import torch
 class SentenceTransformersEmbeddings:
     def __init__(self, model_name="paraphrase-multilingual-mpnet-base-v2"):
         self.model = SentenceTransformer(model_name)
+        # Se disponibile, usa la GPU
         if torch.cuda.is_available():
             self.model.to('cuda')
-        
+        self.dimension = EMBEDDING_DIMENSION
+
     def embed_query(self, text):
         """Genera embedding per una singola query."""
         with torch.no_grad():
