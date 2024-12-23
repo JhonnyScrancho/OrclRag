@@ -377,18 +377,27 @@ def main():
             
         elif "Database" in selected:
             st.markdown("## 📊 Database")
-            tabs = st.tabs(["📥 Caricamento", "📋 Visualizzazione"])
             
-            with tabs[0]:
-                # Sezione di caricamento
-                if uploaded_file:
-                    process_uploaded_file(uploaded_file, index, embeddings)
-                else:
-                    st.info("ℹ️ Carica un file JSON dalla barra laterale per iniziare.")
+            # SPOSTATO QUI IL PROCESSAMENTO DEL FILE - FUORI DAI TABS
+            if uploaded_file is not None:
+                st.info(f"File caricato: {uploaded_file.name}")
+                if st.button("Processa File", type="primary"):
+                    with st.spinner("Elaborazione in corso..."):
+                        data = load_json(uploaded_file)
+                        if data:
+                            progress = st.progress(0)
+                            total_chunks = 0
+                            
+                            for i, thread in enumerate(data):
+                                chunks = process_and_index_thread(thread, embeddings, index)
+                                total_chunks += chunks
+                                progress.progress((i + 1) / len(data))
+                            
+                            st.success(f"Processati {len(data)} thread e creati {total_chunks} chunks")
+                            st.rerun()
             
-            with tabs[1]:
-                # Sezione di visualizzazione
-                display_database_view(index)
+            # Visualizzazione database dopo il processamento
+            display_database_view(index)
             
         else:  # Settings
             st.markdown("## ⚙️ Settings")
