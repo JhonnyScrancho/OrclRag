@@ -14,7 +14,7 @@ class SmartRetriever:
         self.index = index
         self.embeddings = embeddings
         self.MAX_DOCUMENTS = 10000
-        logger.debug(f"SmartRetriever initialized with EMBEDDING_DIMENSION: {EMBEDDING_DIMENSION}")
+        print(f"DEBUG: SmartRetriever initialized with EMBEDDING_DIMENSION: {EMBEDDING_DIMENSION}")
 
     def get_all_documents(self) -> List[Any]:
         """Recupera tutti i documenti dall'indice."""
@@ -23,7 +23,8 @@ class SmartRetriever:
             query_vector = [0.0] * EMBEDDING_DIMENSION
             query_vector[0] = 1.0
             
-            logger.debug(f"get_all_documents - query vector dimension: {len(query_vector)}")
+            print(f"DEBUG: get_all_documents - query vector dimension: {len(query_vector)}")
+            st.write(f"DEBUG: query vector dimension before Pinecone call: {len(query_vector)}")
             
             results = self.index.query(
                 vector=query_vector,
@@ -32,7 +33,8 @@ class SmartRetriever:
             )
             return results.matches
         except Exception as e:
-            logger.error(f"Error fetching documents: {str(e)}")
+            print(f"ERROR fetching documents: {str(e)}")
+            st.error(f"Full error: {str(e)}")
             return []
 
     def _format_metadata(self, metadata: Dict) -> Dict:
@@ -55,7 +57,8 @@ class SmartRetriever:
         try:
             # Genera l'embedding della query
             query_embedding = self.embeddings.embed_query(query)
-            logger.debug(f"get_relevant_documents - query embedding dimension: {len(query_embedding)}")
+            print(f"DEBUG: get_relevant_documents - query embedding dimension: {len(query_embedding)}")
+            st.write(f"DEBUG: query embedding dimension before Pinecone call: {len(query_embedding)}")
             
             # Cerca i documenti più simili
             results = self.index.query(
@@ -84,13 +87,13 @@ class SmartRetriever:
                     "%Y-%m-%dT%H:%M:%S%z"
                 ))
             except (ValueError, TypeError):
-                logger.warning("Unable to sort documents by timestamp")
+                print("WARNING: Unable to sort documents by timestamp")
             
             return documents
             
         except Exception as e:
-            logger.error(f"Error in retrieval: {str(e)}")
-            logger.exception("Full traceback:")  # Questo aggiungerà il traceback completo
+            print(f"ERROR in retrieval: {str(e)}")
+            st.error(f"Full error in retrieval: {str(e)}")
             return [Document(
                 page_content=f"Errore durante il recupero dei documenti: {str(e)}",
                 metadata={"type": "error"}
