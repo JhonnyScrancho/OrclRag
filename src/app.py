@@ -43,7 +43,8 @@ class MetricsManager:
                 'total_queries': 0,
                 'avg_response_time': 0,
                 'feedback_scores': [],
-                'query_history': []
+                'query_history': [],
+                'errors': []  # Aggiungiamo tracking degli errori
             }
         if 'performance_metrics' not in st.session_state:
             st.session_state.performance_metrics = {
@@ -67,6 +68,14 @@ class MetricsManager:
             (metrics['avg_response_time'] * (metrics['total_queries'] - 1) + response_time)
             / metrics['total_queries']
         )
+
+    def track_error(self, error_msg: str):
+        """Track error occurrences"""
+        metrics = st.session_state.query_metrics
+        metrics['errors'].append({
+            'error': error_msg,
+            'timestamp': datetime.now().isoformat()
+        })
 
     def add_feedback(self, query_idx: int, score: int, comment: str = ""):
         """Add user feedback"""
@@ -101,7 +110,8 @@ class MetricsManager:
             'avg_feedback_score': sum(f['score'] for f in metrics['feedback_scores']) / len(metrics['feedback_scores']) if metrics['feedback_scores'] else 0,
             'avg_embedding_time': avg_embedding,
             'avg_retrieval_time': avg_retrieval,
-            'avg_rerank_time': avg_rerank
+            'avg_rerank_time': avg_rerank,
+            'total_errors': len(metrics['errors'])  # Aggiungiamo conteggio errori
         }
 
 def display_feedback_ui(query_idx: int):
