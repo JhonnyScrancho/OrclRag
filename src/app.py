@@ -321,24 +321,38 @@ def display_database_view(index):
                 st.error(f"Error fetching documents: {str(e)}")
 
 def process_uploaded_file(uploaded_file, index, embeddings):
-    """Process uploaded JSON file."""
-    # Rimuoviamo la condizione if st.button() per rendere il bottone sempre visibile quando c'è un file
-    st.write("File caricato:", uploaded_file.name)
-    process_button = st.button("Process File", key="process_file", type="primary")
-    
-    if process_button:
-        with st.spinner("Processing file..."):
-            data = load_json(uploaded_file)
-            if data:
-                progress = st.progress(0)
-                total_chunks = 0
-                
-                for i, thread in enumerate(data):
-                    chunks = process_and_index_thread(thread, embeddings, index)
-                    total_chunks += chunks
-                    progress.progress((i + 1) / len(data))
-                
-                st.success(f"Processed {len(data)} threads and created {total_chunks} chunks")
+    """Process uploaded JSON file with improved feedback and error handling."""
+    if uploaded_file is not None:
+        st.info("📁 File caricato: " + uploaded_file.name)
+        
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            st.markdown("###Processamento File")
+            st.markdown("Il file verrà processato e indicizzato nel database.")
+        
+        with col2:
+            process_button = st.button("▶️ Processa File", key="process_file", use_container_width=True)
+        
+        if process_button:
+            try:
+                with st.spinner("Elaborazione in corso..."):
+                    data = load_json(uploaded_file)
+                    if data:
+                        progress = st.progress(0)
+                        status_text = st.empty()
+                        total_chunks = 0
+                        
+                        for i, thread in enumerate(data):
+                            status_text.text(f"Processamento thread {i+1}/{len(data)}...")
+                            chunks = process_and_index_thread(thread, embeddings, index)
+                            total_chunks += chunks
+                            progress.progress((i + 1) / len(data))
+                        
+                        st.success(f"✅ Completato! Processati {len(data)} thread e creati {total_chunks} chunks")
+                        time.sleep(2)
+                        st.rerun()
+            except Exception as e:
+                st.error(f"❌ Errore durante il processamento: {str(e)}")
 
 def main():
     # Apply custom styles
@@ -362,11 +376,19 @@ def main():
             display_chat_interface(index, embeddings)
             
         elif "Database" in selected:
-            st.markdown("## 📊 Database")  # Aggiungiamo un titolo per chiarezza
-            if uploaded_file:
-                # Mostra il bottone di processo solo quando c'è un file caricato
-                process_uploaded_file(uploaded_file, index, embeddings)
-            display_database_view(index)
+            st.markdown("## 📊 Database")
+            tabs = st.tabs(["📥 Caricamento", "📋 Visualizzazione"])
+            
+            with tabs[0]:
+                # Sezione di caricamento
+                if uploaded_file:
+                    process_uploaded_file(uploaded_file, index, embeddings)
+                else:
+                    st.info("ℹ️ Carica un file JSON dalla barra laterale per iniziare.")
+            
+            with tabs[1]:
+                # Sezione di visualizzazione
+                display_database_view(index)
             
         else:  # Settings
             st.markdown("## ⚙️ Settings")
