@@ -41,32 +41,46 @@ def get_thread_id(thread):
 def initialize_pinecone():
     """Inizializza connessione a Pinecone."""
     try:
-        st.write("Initializing Pinecone...")
-        pc = Pinecone(api_key=st.secrets["PINECONE_API_KEY"])
+        # Debug the API key (only length for security)
+        api_key = st.secrets["PINECONE_API_KEY"]
+        st.write(f"API key length: {len(api_key)}")
         
-        # Print available indexes
-        indexes = pc.list_indexes()
-        st.write("Available indexes:", indexes)
+        # Try to print the key type
+        st.write(f"API key type: {type(api_key)}")
         
-        if INDEX_NAME not in indexes:
-            st.error(f"Index {INDEX_NAME} not found. Available indexes: {indexes}")
-            return None
-            
-        index = pc.Index(INDEX_NAME)
-        
-        # Test if the index is working
+        # Initialize Pinecone with explicit error handling
         try:
-            stats = index.describe_index_stats()
-            st.write("Index stats:", stats)
+            pc = Pinecone(api_key=api_key)
         except Exception as e:
-            st.error(f"Error getting index stats: {str(e)}")
+            st.error(f"Error creating Pinecone instance: {str(e)}")
+            st.error(f"Error type: {type(e)}")
             return None
             
-        return index
-        
+        # Try to list indexes with explicit error handling
+        try:
+            indexes = pc.list_indexes()
+            st.write("Available indexes:", indexes)
+        except Exception as e:
+            st.error(f"Error listing indexes: {str(e)}")
+            st.error(f"Error type: {type(e)}")
+            return None
+            
+        if INDEX_NAME not in indexes:
+            st.error(f"Index {INDEX_NAME} not found!")
+            return None
+            
+        # Try to get the index
+        try:
+            index = pc.Index(INDEX_NAME)
+            return index
+        except Exception as e:
+            st.error(f"Error getting index: {str(e)}")
+            st.error(f"Error type: {type(e)}")
+            return None
+            
     except Exception as e:
         st.error(f"Pinecone initialization error: {str(e)}")
-        st.error("Check your PINECONE_API_KEY in secrets")
+        st.error(f"Error type: {type(e)}")
         return None
 
 def process_and_index_thread(thread, embeddings, index):
