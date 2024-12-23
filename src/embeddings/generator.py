@@ -2,16 +2,17 @@
 import streamlit as st
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from sentence_transformers import SentenceTransformer
-from config import CHUNK_SIZE, CHUNK_OVERLAP, EMBEDDING_DIMENSION
-import numpy as np
+from config import CHUNK_SIZE, CHUNK_OVERLAP, EMBEDDING_MODEL
 import torch
 
 class SentenceTransformersEmbeddings:
-    def __init__(self, model_name="paraphrase-multilingual-mpnet-base-v2"):
+    def __init__(self, model_name=None):
+        if model_name is None:
+            model_name = EMBEDDING_MODEL
         self.model = SentenceTransformer(model_name)
         if torch.cuda.is_available():
             self.model.to('cuda')
-        
+
     def embed_query(self, text):
         """Genera embedding per una singola query."""
         with torch.no_grad():
