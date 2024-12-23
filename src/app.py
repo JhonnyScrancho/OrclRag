@@ -1,5 +1,5 @@
 import streamlit as st
-from config import EMBEDDING_DIMENSION, INDEX_NAME, LLM_MODEL 
+from config import INDEX_NAME, LLM_MODEL 
 from data.loader import load_json
 from data.processor import process_thread
 from embeddings.generator import create_chunks, get_embeddings
@@ -170,11 +170,15 @@ def integrate_database_cleanup(index):
         render_database_cleanup(index)
 
 def verify_delete_permissions(index):
+    """Verify delete permissions on the index"""
     try:
+        # Create a test vector with some non-zero values
         test_id = "test_permissions"
-        test_vector = [0.0] * EMBEDDING_DIMENSION
-        test_vector[0] = 1.0
+        test_vector = [0.0] * 1536
+        test_vector[0] = 1.0  # Set first value to 1.0
+        test_vector[-1] = 0.5  # Set last value to 0.5
         
+        # Insert test vector
         index.upsert(
             vectors=[{
                 "id": test_id,
@@ -183,10 +187,16 @@ def verify_delete_permissions(index):
             }]
         )
         
-        time.sleep(0.5)
-        index.delete(ids=[test_id])
+        # Small delay to ensure upsert is processed
         time.sleep(0.5)
         
+        # Try to delete it
+        index.delete(ids=[test_id])
+        
+        # Small delay to ensure delete is processed
+        time.sleep(0.5)
+        
+        # Verify deletion
         verification = index.fetch(ids=[test_id])
         if verification and hasattr(verification, 'vectors') and verification.vectors:
             return False, "Insufficient delete permissions"
@@ -320,39 +330,22 @@ def display_database_view(index):
             except Exception as e:
                 st.error(f"Error fetching documents: {str(e)}")
 
+
 def process_uploaded_file(uploaded_file, index, embeddings):
-    """Process uploaded JSON file with improved feedback and error handling."""
-    if uploaded_file is not None:
-        st.info("📁 File caricato: " + uploaded_file.name)
-        
-        col1, col2 = st.columns([3, 1])
-        with col1:
-            st.markdown("###Processamento File")
-            st.markdown("Il file verrà processato e indicizzato nel database.")
-        
-        with col2:
-            process_button = st.button("▶️ Processa File", key="process_file", use_container_width=True)
-        
-        if process_button:
-            try:
-                with st.spinner("Elaborazione in corso..."):
-                    data = load_json(uploaded_file)
-                    if data:
-                        progress = st.progress(0)
-                        status_text = st.empty()
-                        total_chunks = 0
-                        
-                        for i, thread in enumerate(data):
-                            status_text.text(f"Processamento thread {i+1}/{len(data)}...")
-                            chunks = process_and_index_thread(thread, embeddings, index)
-                            total_chunks += chunks
-                            progress.progress((i + 1) / len(data))
-                        
-                        st.success(f"✅ Completato! Processati {len(data)} thread e creati {total_chunks} chunks")
-                        time.sleep(2)
-                        st.rerun()
-            except Exception as e:
-                st.error(f"❌ Errore durante il processamento: {str(e)}")
+    """Process uploaded JSON file."""
+    if st.button("Process File", key="process_file"):
+        with st.spinner("Processing file..."):
+            data = load_json(uploaded_file)
+            if data:
+                progress = st.progress(0)
+                total_chunks = 0
+                
+                for i, thread in enumerate(data):
+                    chunks = process_and_index_thread(thread, embeddings, index)
+                    total_chunks += chunks
+                    progress.progress((i + 1) / len(data))
+                
+                st.success(f"Processed {len(data)} threads and created {total_chunks} chunks")
 
 def main():
     # Apply custom styles
@@ -376,27 +369,8 @@ def main():
             display_chat_interface(index, embeddings)
             
         elif "Database" in selected:
-            st.markdown("## 📊 Database")
-            
-            # SPOSTATO QUI IL PROCESSAMENTO DEL FILE - FUORI DAI TABS
-            if uploaded_file is not None:
-                st.info(f"File caricato: {uploaded_file.name}")
-                if st.button("Processa File", type="primary"):
-                    with st.spinner("Elaborazione in corso..."):
-                        data = load_json(uploaded_file)
-                        if data:
-                            progress = st.progress(0)
-                            total_chunks = 0
-                            
-                            for i, thread in enumerate(data):
-                                chunks = process_and_index_thread(thread, embeddings, index)
-                                total_chunks += chunks
-                                progress.progress((i + 1) / len(data))
-                            
-                            st.success(f"Processati {len(data)} thread e creati {total_chunks} chunks")
-                            st.rerun()
-            
-            # Visualizzazione database dopo il processamento
+            if uploaded_file:
+                process_uploaded_file(uploaded_file, index, embeddings)
             display_database_view(index)
             
         else:  # Settings
