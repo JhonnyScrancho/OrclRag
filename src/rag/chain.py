@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 def setup_rag_chain(retriever):
     """Configura una chain RAG semplificata che sfrutta le capacità di comprensione del LLM."""
     llm = ChatOpenAI(
-        model_name="gpt-3.5-turbo",
+        model_name="gpt-4-turbo-preview",
         temperature=0.3,
         api_key=st.secrets["OPENAI_API_KEY"]
     )
@@ -59,7 +59,7 @@ REGOLE:
             logger.info(f"Processing query: {query}")
             
             # Ottieni i documenti rilevanti
-            docs = retriever.get_all_documents()
+            docs = retriever.get_relevant_documents(query)
             logger.info(f"Retrieved {len(docs)} documents from the database")
             
             if not docs:
