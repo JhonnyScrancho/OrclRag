@@ -1,188 +1,103 @@
-from sentence_transformers import CrossEncoder
+# retriever.py
 import streamlit as st
 from typing import List, Dict, Any
 from langchain_core.documents import Document
 import logging
 from datetime import datetime
-from config import EMBEDDING_DIMENSION, INITIAL_RETRIEVAL_K, FINAL_K
-from functools import lru_cache
+from config import EMBEDDING_DIMENSION
 
 logger = logging.getLogger(__name__)
 
 class SmartRetriever:
     def __init__(self, index, embeddings):
-        """Initialize the SmartRetriever with index and embeddings model."""
         self.index = index
         self.embeddings = embeddings
-        self.cross_encoder = CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2')
-        
-    @lru_cache(maxsize=100)
-    def _cached_documents(self, query_vector_key: tuple, top_k: int) -> List[Any]:
-        """Internal cached function for document retrieval"""
-        try:
-            # Convert back to list for Pinecone
-            query_vector = list(query_vector_key)
-            results = self.index.query(
-                vector=query_vector,
-                top_k=top_k,
-                include_metadata=True
-            )
-            return results.matches if results and hasattr(results, 'matches') else []
-        except Exception as e:
-            logger.error(f"Error in cached document retrieval: {str(e)}")
-            return []
-
-    def _fetch_thread_documents(self, thread_id: str) -> List[Any]:
-        """Fetch all documents for a specific thread."""
-        try:
-            results = self.index.query(
-                vector=[1.0] + [0.0] * (self.embeddings.dimension - 1),
-                filter={"thread_id": thread_id},
-                top_k=1000,  # Increased to ensure we get all documents
-                include_metadata=True
-            )
-            return results.matches if results and hasattr(results, 'matches') else []
-        except Exception as e:
-            logger.error(f"Error fetching thread documents: {str(e)}")
-            return []
-
-    def _rerank_documents(self, query: str, documents: List[Document], top_k: int = None) -> List[Document]:
-        """Re-rank documents using cross-encoder"""
-        if not documents:
-            return []
-            
-        if top_k is None:
-            top_k = len(documents)  # Default to keeping all documents
-
-        try:
-            # Prepare pairs for cross-encoder
-            pairs = [[query, doc.page_content] for doc in documents]
-            
-            # Get cross-encoder scores
-            scores = self.cross_encoder.predict(pairs)
-            
-            # Create document-score pairs and sort
-            doc_score_pairs = list(zip(documents, scores))
-            reranked_docs = sorted(doc_score_pairs, key=lambda x: x[1], reverse=True)
-            
-            # Return top-k documents
-            return [doc for doc, _ in reranked_docs[:top_k]]
-            
-        except Exception as e:
-            logger.error(f"Error in document re-ranking: {str(e)}")
-            return documents[:top_k]  # Fallback to original order
+        self.MAX_DOCUMENTS = 10000
+        self.EMBEDDING_DIMENSION = EMBEDDING_DIMENSION   # Set explicitly to match index dimension
 
     def get_all_documents(self) -> List[Any]:
-        """Retrieve all documents from the index."""
+        """Retrieve all documents from the index using a properly dimensioned query vector."""
         try:
-            query_vector = [0.0] * self.embeddings.dimension
+            # Create a zero vector with correct dimension
+            query_vector = [0.0] * EMBEDDING_DIMENSION
+            # Set first element to 1.0 to ensure non-zero vector
             query_vector[0] = 1.0
             
-            # Use Streamlit's cache_data at function call level
-            @st.cache_data(ttl=3600)
-            def get_cached_docs(vector_key: tuple):
-                return self._cached_documents(vector_key, 1000)  # Increased limit
-            
-            return get_cached_docs(tuple(query_vector))
-            
-        except Exception as e:
-            logger.error(f"Error fetching all documents: {str(e)}")
-            return []
-
-    def get_relevant_documents(self, query: str) -> List[Document]:
-        """Enhanced document retrieval with complete thread fetching."""
-        try:
-            # Generate query embedding
-            query_embedding = self.embeddings.embed_query(query)
-            
-            # Aumentiamo il top_k e rimuoviamo filtri troppo restrittivi
             results = self.index.query(
-                vector=query_embedding,
-                top_k=100,  # Aumentato da 10
+                vector=query_vector,
+                top_k=self.MAX_DOCUMENTS,
                 include_metadata=True
             )
-
+            
             if not results.matches:
-                logger.warning("No initial matches found")
+                logger.warning("No documents found in index")
                 return []
-
-            # Aggiungiamo logging per debug
-            logger.info(f"Found {len(results.matches)} initial matches")
-
-            # Collect unique thread IDs
-            thread_ids = {doc.metadata.get("thread_id") for doc in results.matches if doc.metadata}
-            logger.info(f"Found {len(thread_ids)} unique threads")
-            
-            # Fetch ALL documents for each relevant thread
-            all_documents = []
-            for thread_id in thread_ids:
-                if not thread_id:
-                    continue
-                    
-                # Query specifically for this thread to get ALL its posts
-                thread_results = self.index.query(
-                    vector=[1.0] + [0.0] * (self.embeddings.dimension - 1),
-                    filter={"thread_id": thread_id},
-                    top_k=1000,  # High number to get all posts
-                    include_metadata=True
-                )
                 
-                if thread_results and thread_results.matches:
-                    all_documents.extend(thread_results.matches)
-                    logger.info(f"Retrieved {len(thread_results.matches)} posts from thread {thread_id}")
-
-            # Convert to Document objects with deduplication
-            seen_post_ids = set()
-            documents = []
+            return results.matches
             
-            for doc in all_documents:
-                post_id = doc.metadata.get("post_id")
-                if not post_id or post_id in seen_post_ids:
-                    continue
-                    
-                seen_post_ids.add(post_id)
-                
-                # Ensure all necessary metadata is included
-                documents.append(Document(
-                    page_content=doc.metadata.get("text", ""),
-                    metadata={
-                        "thread_id": doc.metadata.get("thread_id"),
-                        "thread_title": doc.metadata.get("thread_title"),
-                        "post_id": post_id,
-                        "author": doc.metadata.get("author"),
-                        "post_time": doc.metadata.get("post_time"),
-                        "total_posts": doc.metadata.get("total_posts"),
-                        "declared_posts": doc.metadata.get("declared_posts"),
-                        "sentiment": doc.metadata.get("sentiment", 0),
-                        "keywords": doc.metadata.get("keywords", []),
-                        "url": doc.metadata.get("url"),
-                        "text": doc.metadata.get("text", "")
-                    }
-                ))
-
-            # Sort chronologically
-            documents.sort(key=lambda x: x.metadata.get("post_time", ""))
-            
-            # Log retrieval statistics
-            logger.info(f"Retrieved and processed {len(documents)} total documents from {len(thread_ids)} threads")
-            
-            # Optional: calculate and log thread completeness
-            for thread_id in thread_ids:
-                thread_posts = [d for d in documents if d.metadata.get("thread_id") == thread_id]
-                if thread_posts:
-                    declared = thread_posts[0].metadata.get("total_posts", 0)
-                    found = len(thread_posts)
-                    logger.info(f"Thread {thread_id}: found {found}/{declared} posts")
-
-            return documents
-
         except Exception as e:
-            logger.error(f"Error in retrieval: {str(e)}")
-            st.error(f"Error retrieving documents: {str(e)}")
+            logger.error(f"Error fetching documents: {str(e)}")
             return []
 
-    def query_with_limit(self, query: str, limit: int = 5) -> List[Document]:
-        """Query documents with a specific limit."""
-        docs = self.get_relevant_documents(query)
-        reranked_docs = self._rerank_documents(query, docs, top_k=limit)
-        return reranked_docs
+    def _format_metadata(self, metadata: Dict) -> Dict:
+        """Format and standardize metadata."""
+        formatted = {
+            "author": metadata.get("author", "Unknown"),
+            "post_time": metadata.get("post_time", "Unknown"),
+            "text": metadata.get("text", ""),
+            "thread_title": metadata.get("thread_title", "Unknown Thread"),
+            "thread_id": metadata.get("thread_id", "unknown"),
+            "url": metadata.get("url", ""),
+            "post_id": metadata.get("post_id", ""),
+            "keywords": metadata.get("keywords", []),
+            "sentiment": metadata.get("sentiment", 0)
+        }
+        return formatted
+
+    def get_relevant_documents(self, query: str) -> List[Document]:
+        """Retrieve relevant documents using proper embeddings."""
+        try:
+            # Generate query embedding using the embeddings model
+            query_embedding = self.embeddings.embed_query(query)
+            
+            # Verify embedding dimension
+            if len(query_embedding) != self.EMBEDDING_DIMENSION:
+                raise ValueError(f"Query embedding dimension {len(query_embedding)} does not match index dimension {self.EMBEDDING_DIMENSION}")
+            
+            # Search for similar documents
+            results = self.index.query(
+                vector=query_embedding,
+                top_k=10,
+                include_metadata=True
+            )
+            
+            if not results.matches:
+                return [Document(page_content="No documents found", metadata={"type": "error"})]
+            
+            # Convert matches to Documents
+            documents = []
+            for match in results.matches:
+                metadata = self._format_metadata(match.metadata)
+                doc = Document(
+                    page_content=metadata["text"],
+                    metadata=metadata
+                )
+                documents.append(doc)
+            
+            # Sort by timestamp
+            try:
+                documents.sort(key=lambda x: datetime.strptime(
+                    x.metadata["post_time"], 
+                    "%Y-%m-%dT%H:%M:%S%z"
+                ))
+            except (ValueError, TypeError):
+                logger.warning("Unable to sort documents by timestamp")
+            
+            return documents
+            
+        except Exception as e:
+            logger.error(f"Error in retrieval: {str(e)}")
+            return [Document(
+                page_content=f"Error retrieving documents: {str(e)}",
+                metadata={"type": "error"}
+            )]

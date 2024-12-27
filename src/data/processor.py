@@ -2,10 +2,6 @@ from typing import List, Dict
 from datetime import datetime
 import hashlib
 import re
-import logging
-import time
-
-logger = logging.getLogger(__name__)
 
 def generate_post_id(post: Dict, thread_id: str) -> str:
     """Genera un ID unico per ogni post basato sul suo contenuto e timestamp."""
@@ -88,26 +84,25 @@ def process_thread(thread: Dict) -> List[str]:
     thread_id = get_thread_id(thread)
     processed_posts = []
     
-    # Verifica e log del numero di posts
-    actual_posts = len(thread['posts'])
-    declared_posts = thread.get('metadata', {}).get('total_posts', 0)
-    logger.info(f"Processing thread {thread_id}: {actual_posts} actual posts, {declared_posts} declared posts")
-    
     # Metadati comuni del thread
     thread_metadata = {
         "thread_id": thread_id,
         "thread_title": thread['title'],
         "url": thread['url'],
         "scrape_time": thread['scrape_time'],
-        "actual_posts": actual_posts,  # Numero effettivo di post
-        "declared_posts": declared_posts,  # Numero dichiarato di post
-        "is_thread": True
+        "total_posts": len(thread['posts']),
+        "is_thread": True  # Flag per identificare che questo è un thread
     }
     
+    # Aggiungi eventuali metadati aggiuntivi dal thread
+    if 'metadata' in thread:
+        thread_metadata.update(thread['metadata'])
+    
+    # Processa ogni post
     for post in thread['posts']:
         metadata = extract_post_content(post, thread_id)
         metadata.update(thread_metadata)
-        metadata["is_chunk"] = False  # Indica che questo è un post reale, non solo un chunk
+        metadata["is_post"] = True  # Flag per identificare che questo è un post
         processed_posts.append(metadata["text"])
     
     return processed_posts

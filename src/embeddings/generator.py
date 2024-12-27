@@ -1,7 +1,9 @@
+# generator.py
+
 from sentence_transformers import SentenceTransformer
 import torch
-from langchain_core.documents import Document
-from config import EMBEDDING_DIMENSION, EMBEDDING_MODEL
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from config import CHUNK_OVERLAP, CHUNK_SIZE, EMBEDDING_DIMENSION, EMBEDDING_MODEL
 import logging
 
 logger = logging.getLogger(__name__)
@@ -53,22 +55,13 @@ class SentenceTransformersEmbeddings:
             raise
 
 def create_chunks(texts):
-    """Divide i testi in chunks mantenendo l'integrità dei post."""
-    chunks = []
-    
-    for text in texts:
-        # Crea un nuovo Document per ogni post
-        chunk = Document(
-            page_content=text,
-            metadata={}  # I metadati verranno aggiunti dopo
-        )
-        chunks.append(chunk)
-    
-    # Log per debug
+    """Divide i testi in chunks."""
+    text_splitter = RecursiveCharacterTextSplitter(
+        chunk_size=CHUNK_SIZE,
+        chunk_overlap=CHUNK_OVERLAP
+    )
+    chunks = text_splitter.create_documents(texts)
     logger.info(f"Created {len(chunks)} chunks from {len(texts)} texts")
-    for i, chunk in enumerate(chunks):
-        logger.debug(f"Chunk {i}: {len(chunk.page_content)} chars")
-    
     return chunks
 
 def get_embeddings():
