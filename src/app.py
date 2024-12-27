@@ -254,11 +254,11 @@ def display_chat_interface(index, embeddings):
     
     st.markdown('</div>', unsafe_allow_html=True)
 
-
 def display_database_view(index):
     """Visualizzazione e gestione del database."""
     st.header("📊 Database Management")
     
+    # Statistiche generali
     try:
         stats = index.describe_index_stats()
         col1, col2 = st.columns(2)
@@ -270,13 +270,16 @@ def display_database_view(index):
         st.error(f"Error retrieving database stats: {str(e)}")
         return
 
+    # Gestione documenti
     if st.button("📥 Load Documents", use_container_width=True):
         with st.spinner("Loading documents..."):
             try:
+                # Create a zero vector with correct dimension from stats
                 dimension = stats['dimension']
                 query_vector = [0.0] * dimension
-                query_vector[0] = 1.0
+                query_vector[0] = 1.0  # Set first element to 1.0
                 
+                # Query with the correct dimension vector
                 results = index.query(
                     vector=query_vector,
                     top_k=10000,
@@ -286,42 +289,25 @@ def display_database_view(index):
                 if not results.matches:
                     st.info("No documents found in the database")
                     return
+                    
+                # Process results into a more structured format
+                data = []
+                seen_threads = set()  # Per evitare duplicati
                 
-                # Raggruppa i documenti per thread
-                threads_data = {}
                 for doc in results.matches:
                     thread_id = doc.metadata.get('thread_id')
-                    if thread_id not in threads_data:
-                        threads_data[thread_id] = {
+                    if thread_id not in seen_threads:
+                        seen_threads.add(thread_id)
+                        data.append({
                             'Thread ID': thread_id,
-                            'Title': doc.metadata.get('thread_title'),
-                            'URL': doc.metadata.get('url'),
-                            'Posts': [],
-                            'Total Posts': 0  # Sarà aggiornato dopo
-                        }
-                    
-                    # Estrai il contenuto del post
-                    text = doc.metadata.get('text', '')
-                    post_data = parse_post_content(text)
-                    
-                    if post_data and is_valid_post(post_data):
-                        threads_data[thread_id]['Posts'].append(post_data)
+                            'Title': doc.metadata.get('thread_title', 'N/A'),
+                            'URL': doc.metadata.get('url', 'N/A'),
+                            'Author': doc.metadata.get('author', 'N/A'),
+                            'Timestamp': doc.metadata.get('post_time', 'N/A'),
+                            'Total Posts': doc.metadata.get('total_posts', 'N/A')
+                        })
                 
-                # Aggiorna il conteggio totale dei post per ogni thread
-                for thread_data in threads_data.values():
-                    thread_data['Total Posts'] = len(thread_data['Posts'])
-                
-                # Crea DataFrame per la vista principale
-                threads_list = []
-                for thread_data in threads_data.values():
-                    threads_list.append({
-                        'Thread ID': thread_data['Thread ID'],
-                        'Title': thread_data['Title'],
-                        'URL': thread_data['URL'],
-                        'Total Posts': thread_data['Total Posts']
-                    })
-                
-                df = pd.DataFrame(threads_list)
+                df = pd.DataFrame(data)
                 
                 # Filtri
                 st.subheader("🔍 Filters")
@@ -331,13 +317,20 @@ def display_database_view(index):
                         "Filter by Title",
                         options=sorted(df['Title'].unique())
                     )
+                with col2:
+                    author_filter = st.multiselect(
+                        "Filter by Author",
+                        options=sorted(df['Author'].unique())
+                    )
                 
                 # Applica filtri
                 filtered_df = df.copy()
                 if title_filter:
                     filtered_df = filtered_df[filtered_df['Title'].isin(title_filter)]
+                if author_filter:
+                    filtered_df = filtered_df[filtered_df['Author'].isin(author_filter)]
                 
-                # Lista thread
+                # Visualizza i dati
                 st.subheader("📋 Thread List")
                 selected_rows = st.data_editor(
                     filtered_df,
@@ -346,114 +339,33 @@ def display_database_view(index):
                     num_rows="dynamic"
                 )
                 
-                # Dettagli thread selezionato
+                # Mostra dettagli del thread selezionato
                 if selected_rows is not None and len(selected_rows) > 0:
-                    selected_thread_id = selected_rows.iloc[0]['Thread ID']
-                    thread_data = threads_data[selected_thread_id]
-                    
                     st.subheader("📝 Thread Details")
-                    with st.expander("Posts", expanded=True):
-                        for post in thread_data['Posts']:
-                            st.markdown(f"""
-                            **Author:** {post['author']}  
-                            **Time:** {post['time']}  
-                            
-                            {format_post_content(post)}
-                            ---
-                            """)
+                    selected_thread = selected_rows.iloc[0]
+                    thread_id = selected_thread['Thread ID']
+                    
+                    # Recupera tutti i post del thread
+                    thread_posts = [
+                        doc for doc in results.matches 
+                        if doc.metadata.get('thread_id') == thread_id
+                    ]
+                    
+                    if thread_posts:
+                        with st.expander("Posts", expanded=True):
+                            for post in thread_posts:
+                                st.markdown(f"""
+                                **Author:** {post.metadata.get('author', 'N/A')}  
+                                **Time:** {post.metadata.get('post_time', 'N/A')}  
+                                **Content:**  
+                                {post.metadata.get('text', 'N/A')}  
+                                ---
+                                """)
                             
             except Exception as e:
                 st.error(f"Error fetching documents: {str(e)}")
                 st.exception(e)
 
-def parse_post_content(text):
-    """Estrae i metadati dal testo del post con gestione migliorata delle citazioni."""
-    lines = text.strip().split('\n')
-    post_data = {
-        'author': '',
-        'time': '',
-        'content': '',
-        'quoted_author': '',
-        'quoted_content': '',
-        'keywords': [],
-        'sentiment': 0.0
-    }
-    
-    content_buffer = []
-    quote_buffer = []
-    current_section = None
-    
-    for line in lines:
-        line = line.strip()
-        if not line:
-            continue
-            
-        if line.startswith('Author:'):
-            post_data['author'] = line.replace('Author:', '').strip()
-        elif line.startswith('Time:'):
-            post_data['time'] = line.replace('Time:', '').strip()
-        elif ' said:' in line and 'Click to expand...' in text:
-            # Gestisce il formato di citazione standard del forum
-            parts = line.split(' said:', 1)
-            if len(parts) == 2:
-                post_data['quoted_author'] = parts[0].strip()
-                quote_start = text.index(' said:') + 6
-                quote_end = text.index('Click to expand...')
-                post_data['quoted_content'] = text[quote_start:quote_end].strip()
-                # Il contenuto effettivo inizia dopo 'Click to expand...'
-                content_start = text.index('Click to expand...') + 17
-                post_data['content'] = text[content_start:].strip()
-                break  # Abbiamo trovato tutto quello che ci serve
-        elif line.startswith('Content:'):
-            current_section = 'content'
-        elif line.startswith('Keywords:'):
-            current_section = 'keywords'
-            post_data['keywords'] = [k.strip() for k in line.replace('Keywords:', '').split(',')]
-        elif line.startswith('Sentiment:'):
-            try:
-                post_data['sentiment'] = float(line.replace('Sentiment:', '').strip())
-            except ValueError:
-                pass
-        elif current_section == 'content':
-            content_buffer.append(line)
-    
-    # Se non abbiamo trovato citazioni nel formato standard
-    if not post_data['content'] and content_buffer:
-        post_data['content'] = ' '.join(content_buffer).strip()
-    
-    return post_data
-
-def is_valid_post(post_data):
-    """Verifica se un post contiene i dati minimi necessari."""
-    return (
-        post_data.get('author') and 
-        post_data.get('time') and 
-        (post_data.get('content') or post_data.get('quoted_content'))
-    )
-
-def format_post_content(post):
-    """Formatta il contenuto del post con citazioni in modo più pulito."""
-    formatted_content = ""
-    
-    # Aggiungi la citazione solo se presente e non vuota
-    if post['quoted_author'] and post['quoted_content']:
-        formatted_content += f"> **{post['quoted_author']} wrote:**  \n> {post['quoted_content'].strip()}\n\n"
-    
-    # Aggiungi il contenuto principale
-    if post['content']:
-        # Rimuovi eventuali citazioni duplicate nel contenuto
-        content = post['content']
-        if post['quoted_content']:
-            content = content.replace(post['quoted_content'], '').strip()
-        formatted_content += content
-    
-    # Aggiungi keywords e sentiment se presenti
-    if post['keywords']:
-        formatted_content += f"\n\n*Keywords: {', '.join(post['keywords'])}*"
-    if post['sentiment'] != 0.0:
-        formatted_content += f"\n*Sentiment: {post['sentiment']}*"
-    
-    return formatted_content
 
 def process_uploaded_file(uploaded_file, index, embeddings):
     """Process uploaded JSON file with button in sidebar."""
