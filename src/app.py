@@ -258,7 +258,14 @@ def display_database_view(index):
     """Visualizzazione e gestione del database."""
     st.header("📊 Database Management")
     
-    # Statistiche generali
+    # Initialize session states
+    if 'selected_thread' not in st.session_state:
+        st.session_state.selected_thread = None
+    if 'threads_data' not in st.session_state:
+        st.session_state.threads_data = None
+    if 'filtered_df' not in st.session_state:
+        st.session_state.filtered_df = None
+    
     try:
         stats = index.describe_index_stats()
         col1, col2 = st.columns(2)
@@ -266,105 +273,162 @@ def display_database_view(index):
             st.metric("Total Documents", stats['total_vector_count'])
         with col2:
             st.metric("Dimension", stats['dimension'])
+            
     except Exception as e:
         st.error(f"Error retrieving database stats: {str(e)}")
         return
 
-    # Gestione documenti
-    if st.button("📥 Load Documents", use_container_width=True):
-        with st.spinner("Loading documents..."):
-            try:
-                # Create a zero vector with correct dimension from stats
-                dimension = stats['dimension']
-                query_vector = [0.0] * dimension
-                query_vector[0] = 1.0  # Set first element to 1.0
-                
-                # Query with the correct dimension vector
-                results = index.query(
-                    vector=query_vector,
-                    top_k=10000,
-                    include_metadata=True
-                )
-                
-                if not results.matches:
-                    st.info("No documents found in the database")
-                    return
+    if st.button("📥 Load Documents", use_container_width=True) or st.session_state.threads_data is not None:
+        if st.session_state.threads_data is None:  # Solo se i dati non sono già caricati
+            with st.spinner("Loading documents..."):
+                try:
+                    dimension = stats['dimension']
+                    query_vector = [0.0] * dimension
+                    query_vector[0] = 1.0
                     
-                # Process results into a more structured format
-                data = []
-                seen_threads = set()  # Per evitare duplicati
-                
-                for doc in results.matches:
-                    thread_id = doc.metadata.get('thread_id')
-                    if thread_id not in seen_threads:
-                        seen_threads.add(thread_id)
-                        data.append({
-                            'Thread ID': thread_id,
-                            'Title': doc.metadata.get('thread_title', 'N/A'),
-                            'URL': doc.metadata.get('url', 'N/A'),
-                            'Author': doc.metadata.get('author', 'N/A'),
-                            'Timestamp': doc.metadata.get('post_time', 'N/A'),
-                            'Total Posts': doc.metadata.get('total_posts', 'N/A')
+                    results = index.query(
+                        vector=query_vector,
+                        top_k=10000,
+                        include_metadata=True
+                    )
+                    
+                    if not results.matches:
+                        st.info("No documents found in the database")
+                        return
+                    
+                    # Processa i risultati
+                    threads_data = {}
+                    for doc in results.matches:
+                        thread_id = doc.metadata.get('thread_id')
+                        if thread_id not in threads_data:
+                            threads_data[thread_id] = {
+                                'Thread ID': thread_id,
+                                'Title': doc.metadata.get('thread_title'),
+                                'URL': doc.metadata.get('url'),
+                                'Posts': [],
+                            }
+                        
+                        text = doc.metadata.get('text', '')
+                        post_data = parse_post_content(text)
+                        
+                        if post_data:
+                            threads_data[thread_id]['Posts'].append(post_data)
+                    
+                    # Calcola totali
+                    for thread_id in threads_data:
+                        threads_data[thread_id]['Total Posts'] = len(threads_data[thread_id]['Posts'])
+                    
+                    # Salva i dati nello state
+                    st.session_state.threads_data = threads_data
+                    
+                    # Crea DataFrame
+                    threads_list = []
+                    for thread_data in threads_data.values():
+                        threads_list.append({
+                            'Thread ID': thread_data['Thread ID'],
+                            'Title': thread_data['Title'],
+                            'URL': thread_data['URL'],
+                            'Total Posts': thread_data['Total Posts']
                         })
-                
-                df = pd.DataFrame(data)
-                
-                # Filtri
-                st.subheader("🔍 Filters")
-                col1, col2 = st.columns(2)
-                with col1:
-                    title_filter = st.multiselect(
-                        "Filter by Title",
-                        options=sorted(df['Title'].unique())
-                    )
-                with col2:
-                    author_filter = st.multiselect(
-                        "Filter by Author",
-                        options=sorted(df['Author'].unique())
-                    )
-                
-                # Applica filtri
-                filtered_df = df.copy()
-                if title_filter:
-                    filtered_df = filtered_df[filtered_df['Title'].isin(title_filter)]
-                if author_filter:
-                    filtered_df = filtered_df[filtered_df['Author'].isin(author_filter)]
-                
-                # Visualizza i dati
-                st.subheader("📋 Thread List")
-                selected_rows = st.data_editor(
-                    filtered_df,
-                    hide_index=True,
-                    use_container_width=True,
-                    num_rows="dynamic"
+                    
+                    st.session_state.filtered_df = pd.DataFrame(threads_list)
+                    
+                except Exception as e:
+                    st.error(f"Error fetching documents: {str(e)}")
+                    st.exception(e)
+                    return
+        
+        # Mostra i filtri e la lista solo se abbiamo dati
+        if st.session_state.filtered_df is not None:
+            # Filtri
+            st.subheader("🔍 Filters")
+            col1, col2 = st.columns(2)
+            with col1:
+                title_filter = st.multiselect(
+                    "Filter by Title",
+                    options=sorted(st.session_state.filtered_df['Title'].unique())
                 )
+            
+            # Applica filtri
+            filtered_df = st.session_state.filtered_df.copy()
+            if title_filter:
+                filtered_df = filtered_df[filtered_df['Title'].isin(title_filter)]
+            
+            # Lista thread
+            st.subheader("📋 Thread List")
+            
+            # Visualizza thread con expander
+            for index, row in filtered_df.iterrows():
+                thread_id = row['Thread ID']
+                thread_data = st.session_state.threads_data[thread_id]
                 
-                # Mostra dettagli del thread selezionato
-                if selected_rows is not None and len(selected_rows) > 0:
-                    st.subheader("📝 Thread Details")
-                    selected_thread = selected_rows.iloc[0]
-                    thread_id = selected_thread['Thread ID']
+                with st.expander(
+                    f"🧵 {thread_data['Title']} ({thread_data['Total Posts']} posts)", 
+                    expanded=(st.session_state.selected_thread == thread_id)
+                ):
+                    st.markdown(f"🔗 [Thread URL]({thread_data['URL']})")
                     
-                    # Recupera tutti i post del thread
-                    thread_posts = [
-                        doc for doc in results.matches 
-                        if doc.metadata.get('thread_id') == thread_id
-                    ]
-                    
-                    if thread_posts:
-                        with st.expander("Posts", expanded=True):
-                            for post in thread_posts:
-                                st.markdown(f"""
-                                **Author:** {post.metadata.get('author', 'N/A')}  
-                                **Time:** {post.metadata.get('post_time', 'N/A')}  
-                                **Content:**  
-                                {post.metadata.get('text', 'N/A')}  
-                                ---
-                                """)
+                    if st.session_state.selected_thread == thread_id:
+                        st.button("Hide Posts", key=f"hide_{thread_id}", 
+                                 on_click=lambda: setattr(st.session_state, 'selected_thread', None))
+                        
+                        for post in thread_data['Posts']:
+                            st.markdown(f"""
+                            **Author:** {post['author']}  
+                            **Time:** {post['time']}  
                             
-            except Exception as e:
-                st.error(f"Error fetching documents: {str(e)}")
-                st.exception(e)
+                            {format_post_content(post)}
+                            ---
+                            """)
+                    else:
+                        st.button("Load Posts", key=f"load_{thread_id}", 
+                                 on_click=lambda tid=thread_id: setattr(st.session_state, 'selected_thread', tid))
+
+def parse_post_content(text):
+    """Estrae i metadati dal testo del post."""
+    lines = text.strip().split('\n')
+    post_data = {
+        'author': '',
+        'time': '',
+        'content': '',
+        'quoted_author': '',
+        'quoted_content': ''
+    }
+    
+    current_section = None
+    content_lines = []
+    
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+            
+        if line.startswith('Author:'):
+            post_data['author'] = line.replace('Author:', '').strip()
+        elif line.startswith('Time:'):
+            post_data['time'] = line.replace('Time:', '').strip()
+        elif line.startswith('Quoted Author:'):
+            post_data['quoted_author'] = line.replace('Quoted Author:', '').strip()
+        elif line.startswith('Quoted Content:'):
+            post_data['quoted_content'] = line.replace('Quoted Content:', '').strip()
+        elif line.startswith('Content:'):
+            current_section = 'content'
+        elif current_section == 'content':
+            if not line.startswith('Keywords:') and not line.startswith('Sentiment:'):
+                content_lines.append(line)
+    
+    post_data['content'] = ' '.join(content_lines).strip()
+    return post_data
+
+def format_post_content(post):
+    """Formatta il contenuto del post con citazioni se presenti."""
+    formatted_content = ""
+    
+    if post['quoted_author'] and post['quoted_content']:
+        formatted_content += f"> **{post['quoted_author']} wrote:**  \n> {post['quoted_content']}\n\n"
+    
+    formatted_content += post['content']
+    return formatted_content
 
 
 def process_uploaded_file(uploaded_file, index, embeddings):
