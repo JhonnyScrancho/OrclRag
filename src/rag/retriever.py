@@ -4,8 +4,6 @@ from langchain_core.documents import Document
 import logging
 from datetime import datetime
 from config import EMBEDDING_DIMENSION
-import json
-from operator import itemgetter
 
 logger = logging.getLogger(__name__)
 
@@ -35,42 +33,38 @@ class SmartRetriever:
                 logger.warning("No documents found in index")
                 return []
             
-            # Raggruppa i chunks per post_id
+            # Raggruppa i chunks per thread_id
             grouped_chunks = {}
             for match in results.matches:
-                post_id = match.metadata.get("post_id", "unknown")
-                if post_id not in grouped_chunks:
-                    grouped_chunks[post_id] = []
-                grouped_chunks[post_id].append(match)
+                thread_id = match.metadata.get("thread_id", "unknown")
+                if thread_id not in grouped_chunks:
+                    grouped_chunks[thread_id] = []
+                grouped_chunks[thread_id].append(match)
             
             # Ricostruisci i documenti completi
             complete_documents = []
-            for post_chunks in grouped_chunks.values():
-                # Ordina i chunks per numero
-                post_chunks.sort(key=lambda x: x.metadata.get("chunk_number", 0))
-                
-                # Usa il testo originale completo se disponibile, altrimenti ricostruisci dai chunks
-                if "text" in post_chunks[0].metadata:
-                    complete_text = post_chunks[0].metadata["text"]
-                else:
-                    complete_text = " ".join(chunk.metadata.get("chunk_text", "") for chunk in post_chunks)
-                
-                # Prendi i metadati dal primo chunk e rimuovi i campi specifici del chunking
-                metadata = post_chunks[0].metadata.copy()
-                metadata.pop("chunk_number", None)
-                metadata.pop("total_chunks", None)
-                metadata.pop("chunk_text", None)
-                
-                complete_documents.append(Document(
-                    page_content=complete_text,
-                    metadata=metadata
+            for thread_chunks in grouped_chunks.values():
+                # Ordina i chunks per timestamp del post
+                thread_chunks.sort(key=lambda x: datetime.fromisoformat(
+                    x.metadata.get("post_time", "1970-01-01T00:00:00+00:00")
                 ))
-            
-            # Ordina per timestamp se possibile
-            try:
-                complete_documents.sort(key=lambda x: datetime.fromisoformat(x.metadata.get("post_time", "1970-01-01T00:00:00+00:00")))
-            except (ValueError, TypeError) as e:
-                logger.warning(f"Could not sort documents by timestamp: {e}")
+                
+                # Ricostruisci ogni post del thread
+                for chunk in thread_chunks:
+                    # Usa il testo originale se disponibile
+                    if "text" in chunk.metadata:
+                        metadata = chunk.metadata.copy()
+                        # Aggiungi informazioni del thread
+                        metadata.update({
+                            "thread_title": chunk.metadata.get("thread_title", "Unknown Thread"),
+                            "url": chunk.metadata.get("url", ""),
+                            "scrape_time": chunk.metadata.get("scrape_time", "")
+                        })
+                        
+                        complete_documents.append(Document(
+                            page_content=chunk.metadata["text"],
+                            metadata=metadata
+                        ))
             
             logger.info(f"Retrieved and reconstructed {len(complete_documents)} documents")
             return complete_documents
@@ -78,21 +72,6 @@ class SmartRetriever:
         except Exception as e:
             logger.error(f"Error fetching documents: {str(e)}")
             return []
-
-    def _format_metadata(self, metadata: Dict) -> Dict:
-        """Format and standardize metadata."""
-        formatted = {
-            "author": metadata.get("author", "Unknown"),
-            "post_time": metadata.get("post_time", "Unknown"),
-            "text": metadata.get("text", ""),
-            "thread_title": metadata.get("thread_title", "Unknown Thread"),
-            "thread_id": metadata.get("thread_id", "unknown"),
-            "url": metadata.get("url", ""),
-            "post_id": metadata.get("post_id", ""),
-            "keywords": metadata.get("keywords", []),
-            "sentiment": metadata.get("sentiment", 0)
-        }
-        return formatted
 
     def get_relevant_documents(self, query: str) -> List[Document]:
         """Retrieve relevant documents using semantic search."""
@@ -114,39 +93,37 @@ class SmartRetriever:
             if not results.matches:
                 return [Document(page_content="No documents found", metadata={"type": "error"})]
             
-            # Raggruppa i chunks per post_id
+            # Raggruppa i chunks per thread_id
             grouped_chunks = {}
             for match in results.matches:
-                post_id = match.metadata.get("post_id", "unknown")
-                if post_id not in grouped_chunks:
-                    grouped_chunks[post_id] = []
-                grouped_chunks[post_id].append(match)
+                thread_id = match.metadata.get("thread_id", "unknown")
+                if thread_id not in grouped_chunks:
+                    grouped_chunks[thread_id] = []
+                grouped_chunks[thread_id].append(match)
             
             # Ricostruisci i documenti completi
             relevant_documents = []
-            for post_chunks in grouped_chunks.values():
-                # Ordina i chunks per numero
-                post_chunks.sort(key=lambda x: x.metadata.get("chunk_number", 0))
-                
-                # Usa il testo originale se disponibile
-                if "text" in post_chunks[0].metadata:
-                    complete_text = post_chunks[0].metadata["text"]
-                else:
-                    complete_text = " ".join(chunk.metadata.get("chunk_text", "") for chunk in post_chunks)
-                
-                # Prendi i metadati dal primo chunk e rimuovi i campi del chunking
-                metadata = self._format_metadata(post_chunks[0].metadata)
-                
-                relevant_documents.append(Document(
-                    page_content=complete_text,
-                    metadata=metadata
+            for thread_chunks in grouped_chunks.values():
+                # Ordina i chunks per timestamp del post
+                thread_chunks.sort(key=lambda x: datetime.fromisoformat(
+                    x.metadata.get("post_time", "1970-01-01T00:00:00+00:00")
                 ))
-            
-            # Ordina per timestamp
-            try:
-                relevant_documents.sort(key=lambda x: datetime.fromisoformat(x.metadata["post_time"]))
-            except (ValueError, TypeError):
-                logger.warning("Unable to sort documents by timestamp")
+                
+                # Ricostruisci ogni post del thread
+                for chunk in thread_chunks:
+                    if "text" in chunk.metadata:
+                        metadata = chunk.metadata.copy()
+                        # Aggiungi informazioni del thread
+                        metadata.update({
+                            "thread_title": chunk.metadata.get("thread_title", "Unknown Thread"),
+                            "url": chunk.metadata.get("url", ""),
+                            "scrape_time": chunk.metadata.get("scrape_time", "")
+                        })
+                        
+                        relevant_documents.append(Document(
+                            page_content=chunk.metadata["text"],
+                            metadata=metadata
+                        ))
             
             return relevant_documents
             
