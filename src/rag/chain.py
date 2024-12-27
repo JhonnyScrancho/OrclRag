@@ -10,49 +10,83 @@ logger = logging.getLogger(__name__)
 
 class ForumMetadataManager:
     def __init__(self):
-        self.system_prompt = """Sei un assistente esperto nell'analisi di contenuti da forum.
-Il tuo compito è fornire risposte utili basate sui thread del forum disponibili.
-Se trovi informazioni parziali o incomplete, cerca comunque di fornire la migliore risposta possibile,
-specificando eventuali limitazioni nelle informazioni disponibili.
+        self.system_prompt = """Sei un analista esperto di forum specializzato nell'identificare trend, pattern e correlazioni tra discussioni correlate.
+Il tuo compito è analizzare approfonditamente thread multipli su un argomento specifico per fornire una comprensione completa del tema.
 
-Quando rispondi:
-1. Usa tutte le informazioni disponibili, anche se parziali
-2. Specifica sempre il livello di confidenza nella risposta
-3. Se necessario, chiedi chiarimenti
-4. Suggerisci alternative se non puoi rispondere direttamente
-"""
+CAPACITÀ CHIAVE:
+1. Analisi Multi-Thread
+   - Collega informazioni tra thread diversi
+   - Identifica opinioni ricorrenti e contrasti
+   - Traccia l'evoluzione delle discussioni nel tempo
+
+2. Comprensione Contestuale
+   - Analizza le citazioni per capire il flusso delle conversazioni
+   - Identifica gli utenti chiave e le loro prospettive
+   - Valuta il sentiment generale e come cambia nel tempo
+
+3. Sintesi e Pattern
+   - Evidenzia trend emergenti
+   - Identifica problemi ricorrenti
+   - Collega cause ed effetti tra discussioni diverse
+
+4. Analisi Temporale
+   - Traccia come le opinioni evolvono nel tempo
+   - Identifica cambiamenti significativi
+   - Correla eventi temporali tra thread diversi
+
+FOCUS SPECIFICI:
+- Cerca connessioni nascoste tra thread apparentemente separati
+- Identifica consensus e disaccordi tra gli utenti
+- Evidenzia come le esperienze si ripetono o differiscono
+- Analizza il contesto completo prima di trarre conclusioni
+
+APPROCCIO ALLE RISPOSTE:
+1. Fornisci una visione d'insieme dell'argomento
+2. Evidenzia pattern e trend significativi
+3. Supporta le conclusioni con esempi specifici dai thread
+4. Segnala eventuali limitazioni nei dati
+5. Suggerisci possibili correlazioni da investigare ulteriormente"""
 
     def build_conversation_prompt(self, context: str, query: str) -> str:
-        # Estrai il conteggio dei threads e posts dal contesto
-        thread_count = context.count("THREAD:")
+        thread_stats = self._extract_thread_stats(context)
+        
         return f"""QUERY: {query}
-
-ATTENZIONE: Il contesto contiene {thread_count} threads. Assicurati di analizzarli tutti.
 
 CONTESTO FORUM:
 {context}
 
-RICHIESTE SPECIFICHE:
-1. Conta e riporta SEMPRE il numero esatto di threads e posts
-2. Verifica la concordanza tra il numero di posts trovati e dichiarati
-3. Includi sempre il range temporale completo
-4. Rispondi poi alla query specifica
+LINEE GUIDA PER L'ANALISI:
+1. Panoramica Generale
+   - Trend principali identificati
+   - Pattern ricorrenti
+   - Evoluzione temporale
 
-FORMAT0 RISPOSTA RICHIESTO:
----
-RISPOSTA DIRETTA:
-Sono stati analizzati [X] threads contenenti [Y] posts.
-[Risposta alla query specifica]
+2. Analisi delle Correlazioni
+   - Collegamenti tra thread
+   - Citazioni significative
+   - Opinioni contrastanti
 
-LIVELLO DI CONFIDENZA:
-[Alto/Medio/Basso] basato su:
-- Numero fonti: [X] threads, [Y] posts
-- Range temporale: [prima data - ultima data]
-- Sentiment medio: [valore]
+3. Insight Chiave
+   - Problemi ricorrenti
+   - Soluzioni proposte
+   - Esperienze comuni
 
-APPROFONDIMENTO:
-[Analisi dettagliata se richiesta]
----"""
+4. Contesto Temporale
+   - Cambiamenti nel tempo
+   - Eventi significativi
+   - Sviluppi recenti
+
+La tua risposta deve:
+- Sintetizzare informazioni da tutti i thread pertinenti
+- Evidenziare le connessioni più significative
+- Supportare le conclusioni con esempi specifici
+- Considerare il contesto temporale completo
+- Suggerire possibili sviluppi futuri"""
+
+    def _extract_thread_stats(self, context: str) -> dict:
+        """Estrae statistiche dettagliate dal contesto."""
+        # Implementazione futura per analisi più dettagliata
+        return {}
 
 def setup_rag_chain(retriever):
     """Configura RAG chain con gestione migliorata dei documenti e batch processing."""
