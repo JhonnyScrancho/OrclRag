@@ -149,8 +149,16 @@ def render_database_cleanup(index):
 def fetch_all_documents(index):
     """Fetch all documents from index with proper error handling"""
     try:
+        # Get index stats to get the correct dimension
+        stats = index.describe_index_stats()
+        dimension = stats['dimension']
+        
+        # Create query vector with correct dimension
+        query_vector = [0.0] * dimension
+        query_vector[0] = 1.0  # Set first element to 1.0
+        
         response = index.query(
-            vector=[1.0] + [0.0] * 1535,  # Vector with first element non-zero
+            vector=query_vector,
             top_k=10000,
             include_metadata=True
         )
@@ -266,8 +274,9 @@ def display_database_view(index):
     if st.button("📥 Load Documents", use_container_width=True):
         with st.spinner("Loading documents..."):
             try:
-                # Create a zero vector with correct dimension (768)
-                query_vector = [0.0] * 768
+                # Create a zero vector with correct dimension from stats
+                dimension = stats['dimension']
+                query_vector = [0.0] * dimension
                 query_vector[0] = 1.0  # Set first element to 1.0
                 
                 # Query with the correct dimension vector
@@ -281,16 +290,22 @@ def display_database_view(index):
                     st.info("No documents found in the database")
                     return
                     
-                # Process results as before
+                # Process results into a more structured format
                 data = []
+                seen_threads = set()  # Per evitare duplicati
+                
                 for doc in results.matches:
-                    data.append({
-                        'ID': doc.id,
-                        'Thread': doc.metadata.get('thread_title', 'N/A'),
-                        'Author': doc.metadata.get('author', 'N/A'),
-                        'Date': doc.metadata.get('post_time', 'N/A'),
-                        'URL': doc.metadata.get('url', 'N/A')
-                    })
+                    thread_id = doc.metadata.get('thread_id')
+                    if thread_id not in seen_threads:
+                        seen_threads.add(thread_id)
+                        data.append({
+                            'Thread ID': thread_id,
+                            'Title': doc.metadata.get('thread_title', 'N/A'),
+                            'URL': doc.metadata.get('url', 'N/A'),
+                            'Author': doc.metadata.get('author', 'N/A'),
+                            'Timestamp': doc.metadata.get('post_time', 'N/A'),
+                            'Total Posts': doc.metadata.get('total_posts', 'N/A')
+                        })
                 
                 df = pd.DataFrame(data)
                 
@@ -298,9 +313,9 @@ def display_database_view(index):
                 st.subheader("🔍 Filters")
                 col1, col2 = st.columns(2)
                 with col1:
-                    thread_filter = st.multiselect(
-                        "Filter by Thread",
-                        options=sorted(df['Thread'].unique())
+                    title_filter = st.multiselect(
+                        "Filter by Title",
+                        options=sorted(df['Title'].unique())
                     )
                 with col2:
                     author_filter = st.multiselect(
@@ -308,28 +323,48 @@ def display_database_view(index):
                         options=sorted(df['Author'].unique())
                     )
                 
-                if thread_filter:
-                    df = df[df['Thread'].isin(thread_filter)]
+                # Applica filtri
+                filtered_df = df.copy()
+                if title_filter:
+                    filtered_df = filtered_df[filtered_df['Title'].isin(title_filter)]
                 if author_filter:
-                    df = df[df['Author'].isin(author_filter)]
+                    filtered_df = filtered_df[filtered_df['Author'].isin(author_filter)]
                 
-                st.subheader("📋 Documents")
+                # Visualizza i dati
+                st.subheader("📋 Thread List")
                 selected_rows = st.data_editor(
-                    df,
+                    filtered_df,
                     hide_index=True,
                     use_container_width=True,
                     num_rows="dynamic"
                 )
                 
+                # Mostra dettagli del thread selezionato
                 if selected_rows is not None and len(selected_rows) > 0:
-                    st.subheader("📝 Document Details")
-                    selected_doc = next(doc for doc in results.matches if doc.id == selected_rows.iloc[0]['ID'])
-                    if selected_doc:
-                        with st.expander("Metadata", expanded=True):
-                            st.json(selected_doc.metadata)
+                    st.subheader("📝 Thread Details")
+                    selected_thread = selected_rows.iloc[0]
+                    thread_id = selected_thread['Thread ID']
+                    
+                    # Recupera tutti i post del thread
+                    thread_posts = [
+                        doc for doc in results.matches 
+                        if doc.metadata.get('thread_id') == thread_id
+                    ]
+                    
+                    if thread_posts:
+                        with st.expander("Posts", expanded=True):
+                            for post in thread_posts:
+                                st.markdown(f"""
+                                **Author:** {post.metadata.get('author', 'N/A')}  
+                                **Time:** {post.metadata.get('post_time', 'N/A')}  
+                                **Content:**  
+                                {post.metadata.get('text', 'N/A')}  
+                                ---
+                                """)
                             
             except Exception as e:
                 st.error(f"Error fetching documents: {str(e)}")
+                st.exception(e)
 
 
 def process_uploaded_file(uploaded_file, index, embeddings):
