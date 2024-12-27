@@ -99,6 +99,29 @@ class OpenAISwarm:
         
         return formatted_text
     
+    async def analyze_batch(self, batch: List[Document]) -> str:
+        """Analizza un singolo batch di documenti."""
+        try:
+            formatted_content = self.format_batch(batch)
+            
+            messages = [
+                SystemMessage(content="""Analizza questi thread del forum. 
+                Identifica:
+                - Argomenti principali discussi
+                - Opinioni e esperienze riportate
+                - Citazioni rilevanti
+                - Collegamenti tra i post
+                Fornisci un'analisi dettagliata ma concisa."""),
+                HumanMessage(content=f"Thread da analizzare:\n{formatted_content}")
+            ]
+            
+            response = await self.analysis_llm.ainvoke(messages)
+            return response.content
+            
+        except Exception as e:
+            logger.error(f"Errore nell'analisi del batch: {str(e)}")
+            return f"Errore nell'analisi del batch: {str(e)}"
+
     async def process_documents(self, documents: List[Document], status_container) -> str:
         """Processa tutti i documenti usando lo swarm."""
         try:
