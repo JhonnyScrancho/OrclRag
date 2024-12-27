@@ -219,21 +219,22 @@ def display_chat_interface(index, embeddings):
     
     # Display chat messages
     for message in st.session_state.messages:
-        with st.chat_message(message["role"]):
+        avatar = "🫏" if message["role"] == "user" else "🧚"
+        with st.chat_message(message["role"], avatar=avatar):
             st.markdown(message["content"])
     
     # Chat input
     if prompt := st.chat_input("Dimmi figliuolo..."):
         st.session_state.messages.append({"role": "user", "content": prompt})
-        with st.chat_message("user"):
+        with st.chat_message("user", avatar="🫏"):
             st.markdown(prompt)
         
         try:
             retriever = SmartRetriever(index, embeddings)
             chain = setup_rag_chain(retriever)
             
-            with st.chat_message("assistant"):
-                with st.spinner("Processing..."):
+            with st.chat_message("assistant", avatar="🧚"):
+                with st.spinner("Sto creando..."):
                     response = chain({"query": prompt})
                     st.markdown(response["result"])
             
