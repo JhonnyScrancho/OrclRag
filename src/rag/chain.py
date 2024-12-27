@@ -1,10 +1,11 @@
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, SystemMessage
-from langchain_core.prompts import PromptTemplate
 import streamlit as st
 import json
 import logging
 from datetime import datetime
+from .swarm import OpenAISwarm
+import asyncio
 
 logger = logging.getLogger(__name__)
 
@@ -15,6 +16,8 @@ def setup_rag_chain(retriever):
         temperature=0.3,
         api_key=st.secrets["OPENAI_API_KEY"]
     )
+
+    swarm = OpenAISwarm()
     
     template = """Sei un assistente esperto nell'analisi di conversazioni dei forum. Hai accesso ai dati di un thread del forum.
 Nel rispondere, presta particolare attenzione a:
@@ -34,6 +37,12 @@ Linee guida per la formattazione:
 - Usa <details> per contenuti collassabili
 - Usa tabelle Markdown per dati strutturati
 - Usa # ## ### per titoli di diverse dimensioni
+-Usa 🔍 per evidenziare scoperte importanti
+- Usa 📈 per trend positivi
+- Usa 📉 per trend negativi
+- Usa 💡 per intuizioni chiave
+- Usa ⚠️ per warning o problemi identificati
+
 
 Dati del forum:
 {context}
@@ -71,49 +80,63 @@ REGOLE:
             for i, doc in enumerate(docs):
                 logger.info(f"Doc {i+1}: Author: {doc.metadata.get('author')}, Time: {doc.metadata.get('post_time')}")
             
-            # Prepara il contesto come una sequenza temporale di post
-            posts_context = []
-            for doc in docs:
-                post = {
-                    "author": doc.metadata.get("author", "Unknown"),
-                    "time": doc.metadata.get("post_time", "Unknown"),
-                    "content": doc.metadata.get("text", ""),
-                    "thread_title": doc.metadata.get("thread_title", "Unknown Thread")
-                }
-                posts_context.append(post)
-            
-            # Ordina i post per timestamp
             try:
-                posts_context.sort(key=lambda x: datetime.fromisoformat(x["time"]))
-                logger.info("Posts sorted by timestamp successfully")
-            except (ValueError, TypeError) as e:
-                logger.warning(f"Could not sort posts by timestamp: {e}")
-            
-            # Aggiungi il titolo del thread al contesto
-            thread_title = posts_context[0]["thread_title"] if posts_context else "Unknown Thread"
-            
-            # Formatta il contesto come una conversazione
-            context = f"Thread: {thread_title}\n\n" + "\n\n".join([
-                f"[{post['time']}] {post['author']}:\n{post['content']}"
-                for post in posts_context
-            ])
-            
-            logger.info(f"Prepared context with {len(posts_context)} posts")
-            
-            # Costruisci i messaggi per il LLM
-            messages = [
-                SystemMessage(content="Sei un assistente esperto nell'analisi di conversazioni dei forum."),
-                HumanMessage(content=template.format(context=context, query=query))
-            ]
-            
-            # Ottieni la risposta dal LLM
-            try:
-                response = llm.invoke(messages)
-                logger.info("LLM response received successfully")
-                return {"result": response.content}
+                # Inizializza event loop per lo swarm
+                try:
+                    loop = asyncio.get_event_loop()
+                except RuntimeError:
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                
+                # Processa i documenti con lo swarm
+                result = loop.run_until_complete(swarm.process_documents(docs))
+                return {"result": result}
+                
             except Exception as e:
-                logger.error(f"Error getting LLM response: {str(e)}")
-                return {"result": f"Errore nella generazione della risposta: {str(e)}"}
+                # Se lo swarm fallisce, usa il metodo standard
+                logger.warning(f"Swarm processing failed: {str(e)}. Falling back to standard processing.")
+                
+                # Prepara il contesto come una sequenza temporale di post
+                posts_context = []
+                for doc in docs:
+                    post = {
+                        "author": doc.metadata.get("author", "Unknown"),
+                        "time": doc.metadata.get("post_time", "Unknown"),
+                        "content": doc.metadata.get("text", ""),
+                        "thread_title": doc.metadata.get("thread_title", "Unknown Thread")
+                    }
+                    posts_context.append(post)
+                
+                # Ordina i post per timestamp
+                try:
+                    posts_context.sort(key=lambda x: datetime.fromisoformat(x["time"]))
+                    logger.info("Posts sorted by timestamp successfully")
+                except (ValueError, TypeError) as e:
+                    logger.warning(f"Could not sort posts by timestamp: {e}")
+                
+                # Aggiungi il titolo del thread al contesto
+                thread_title = posts_context[0]["thread_title"] if posts_context else "Unknown Thread"
+                
+                # Formatta il contesto come una conversazione
+                context = f"Thread: {thread_title}\n\n" + "\n\n".join([
+                    f"[{post['time']}] {post['author']}:\n{post['content']}"
+                    for post in posts_context
+                ])
+                
+                # Costruisci i messaggi per il LLM
+                messages = [
+                    SystemMessage(content="Sei un assistente esperto nell'analisi di conversazioni dei forum."),
+                    HumanMessage(content=template.format(context=context, query=query))
+                ]
+                
+                # Ottieni la risposta dal LLM
+                try:
+                    response = llm.invoke(messages)
+                    logger.info("LLM response received successfully")
+                    return {"result": response.content}
+                except Exception as e:
+                    logger.error(f"Error getting LLM response: {str(e)}")
+                    return {"result": f"Errore nella generazione della risposta: {str(e)}"}
             
         except Exception as e:
             logger.error(f"Error in RAG chain: {str(e)}")
