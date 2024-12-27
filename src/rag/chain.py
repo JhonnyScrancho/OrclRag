@@ -84,9 +84,106 @@ La tua risposta deve:
 - Suggerire possibili sviluppi futuri"""
 
     def _extract_thread_stats(self, context: str) -> dict:
-        """Estrae statistiche dettagliate dal contesto."""
-        # Implementazione futura per analisi più dettagliata
-        return {}
+        """Estrae statistiche dettagliate dal contesto per supportare l'analisi."""
+        import re
+        from collections import defaultdict
+        from datetime import datetime
+
+        stats = {
+            "threads": defaultdict(dict),
+            "users": defaultdict(list),
+            "citations": defaultdict(list),
+            "temporal_data": defaultdict(list),
+            "keywords": defaultdict(int),
+            "sentiment_trends": defaultdict(list)
+        }
+
+        # Pattern per estrarre informazioni
+        thread_pattern = r"THREAD: (.*?)\nPosts trovati: (\d+)\nPosts dichiarati: (\d+)"
+        post_pattern = r"\[(.*?)\] (.*?)\nSentiment: ([-\d.]+)\nKeywords: (.*?)\nContent:(.*?)(?=\n\[|\Z)"
+        citation_pattern = r"(.*?) said:(.*?)Click to expand\.\.\.(.*)"
+
+        # Estrai informazioni sui thread
+        thread_matches = re.finditer(thread_pattern, context, re.DOTALL)
+        for match in thread_matches:
+            title, found, declared = match.groups()
+            thread_id = title.strip()
+            stats["threads"][thread_id] = {
+                "posts_found": int(found),
+                "posts_declared": int(declared),
+                "discrepancy": int(declared) - int(found)
+            }
+
+        # Estrai informazioni sui post
+        post_matches = re.finditer(post_pattern, context, re.DOTALL)
+        for match in post_matches:
+            timestamp, author, sentiment, keywords, content = match.groups()
+            
+            # Analisi temporale
+            try:
+                dt = datetime.strptime(timestamp.strip(), "%Y-%m-%dT%H:%M:%S%z")
+                stats["temporal_data"][dt.strftime("%Y-%m")].append({
+                    "author": author.strip(),
+                    "sentiment": float(sentiment)
+                })
+            except ValueError:
+                pass
+
+            # Analisi utenti
+            stats["users"][author.strip()].append({
+                "timestamp": timestamp.strip(),
+                "sentiment": float(sentiment),
+                "content_length": len(content.strip())
+            })
+
+            # Analisi keywords
+            for kw in keywords.split(", "):
+                if kw.strip():
+                    stats["keywords"][kw.strip()] += 1
+
+            # Analisi citazioni
+            citation_match = re.search(citation_pattern, content)
+            if citation_match:
+                quoted_author, quoted_content, actual_content = citation_match.groups()
+                stats["citations"].append({
+                    "quoting_author": author.strip(),
+                    "quoted_author": quoted_author.strip(),
+                    "timestamp": timestamp.strip(),
+                    "sentiment": float(sentiment)
+                })
+
+            # Analisi sentiment
+            stats["sentiment_trends"][timestamp[:7]].append(float(sentiment))
+
+        # Calcola statistiche aggregate
+        stats["aggregated"] = {
+            "total_threads": len(stats["threads"]),
+            "total_users": len(stats["users"]),
+            "total_citations": len(stats["citations"]),
+            "top_keywords": sorted(stats["keywords"].items(), key=lambda x: x[1], reverse=True)[:10],
+            "user_engagement": sorted(
+                [(user, len(posts)) for user, posts in stats["users"].items()],
+                key=lambda x: x[1],
+                reverse=True
+            )[:5],
+            "temporal_range": {
+                "start": min(stats["temporal_data"].keys()) if stats["temporal_data"] else None,
+                "end": max(stats["temporal_data"].keys()) if stats["temporal_data"] else None
+            }
+        }
+
+        # Calcola trend del sentiment
+        if stats["sentiment_trends"]:
+            sorted_trends = sorted(stats["sentiment_trends"].items())
+            stats["aggregated"]["sentiment_evolution"] = [
+                {
+                    "period": period,
+                    "avg_sentiment": sum(sentiments)/len(sentiments) if sentiments else 0
+                }
+                for period, sentiments in sorted_trends
+            ]
+
+        return dict(stats)  # Converti defaultdict in dict normale
 
 def setup_rag_chain(retriever):
     """Configura RAG chain con gestione migliorata dei documenti e batch processing."""
