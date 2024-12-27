@@ -92,8 +92,15 @@ class SmartRetriever:
     def get_relevant_documents(self, query: str) -> List[Document]:
         """Enhanced document retrieval with complete thread fetching."""
         try:
+            logger.info(f"Starting document retrieval for query: {query}")
+            
+            # Verifica stato dell'indice
+            stats = self.index.describe_index_stats()
+            logger.info(f"Current index stats: {stats}")
+            
             # Generate query embedding
             query_embedding = self.embeddings.embed_query(query)
+            logger.info("Generated query embedding")
             
             # Prima query per trovare i thread rilevanti
             initial_results = self.index.query(
@@ -106,18 +113,26 @@ class SmartRetriever:
                 logger.warning("No initial matches found")
                 return []
             
-            # Log per debug
+            # Log dei risultati iniziali
             logger.info(f"Found {len(initial_results.matches)} initial matches")
+            for match in initial_results.matches[:5]:  # Log primi 5 risultati
+                logger.info(f"Match ID: {match.id}, Score: {match.score}, Metadata: {match.metadata}")
             
             # Raccoglie thread_id unici
-            thread_ids = {doc.metadata.get("thread_id") for doc in initial_results.matches if doc.metadata and doc.metadata.get("thread_id")}
-            logger.info(f"Found {len(thread_ids)} unique threads")
+            thread_ids = {
+                doc.metadata.get("thread_id") 
+                for doc in initial_results.matches 
+                if doc.metadata and doc.metadata.get("thread_id")
+            }
+            logger.info(f"Found {len(thread_ids)} unique threads: {thread_ids}")
             
             # Recupera TUTTI i post per ogni thread
             all_documents = []
             for thread_id in thread_ids:
                 if not thread_id:
                     continue
+                
+                logger.info(f"Fetching posts for thread: {thread_id}")
                 
                 # Query specifica per il thread
                 thread_results = self.index.query(
@@ -133,15 +148,25 @@ class SmartRetriever:
                 if thread_results and thread_results.matches:
                     thread_posts = thread_results.matches
                     logger.info(f"Retrieved {len(thread_posts)} posts from thread {thread_id}")
+                    # Log dei primi post per debug
+                    for post in thread_posts[:2]:
+                        logger.info(f"Sample post metadata: {post.metadata}")
                     all_documents.extend(thread_posts)
+                else:
+                    logger.warning(f"No posts found for thread {thread_id}")
             
             # Deduplicazione e conversione in Document
             seen_post_ids = set()
             documents = []
             
             for doc in all_documents:
-                post_id = doc.metadata.get("unique_post_id")  # Usiamo unique_post_id invece di post_id
-                if not post_id or post_id in seen_post_ids:
+                post_id = doc.metadata.get("unique_post_id")
+                if not post_id:
+                    logger.warning(f"Missing unique_post_id in metadata: {doc.metadata}")
+                    continue
+                    
+                if post_id in seen_post_ids:
+                    logger.debug(f"Skipping duplicate post: {post_id}")
                     continue
                 
                 seen_post_ids.add(post_id)
@@ -183,7 +208,7 @@ class SmartRetriever:
             return documents
             
         except Exception as e:
-            logger.error(f"Error in retrieval: {str(e)}")
+            logger.error(f"Error in retrieval: {str(e)}", exc_info=True)
             return []
 
     def query_with_limit(self, query: str, limit: int = 5) -> List[Document]:

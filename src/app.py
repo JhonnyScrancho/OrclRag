@@ -684,20 +684,59 @@ def process_uploaded_file(uploaded_file, index, embeddings):
         if st.sidebar.button("Process File", key="process_file", use_container_width=True):
             with st.spinner("Processing file..."):
                 try:
+                    # Log inizio processo
+                    logger.info("Starting file processing")
+                    
                     # Carica il file JSON
                     data = load_json(uploaded_file)
                     if not data:
+                        logger.error("No data loaded from JSON file")
                         return
+                    
+                    logger.info(f"Loaded JSON data with {len(data)} threads")
 
                     total_posts = 0
+                    total_vectors = 0
                     progress = st.progress(0)
                     
                     # Processa ogni thread
                     for i, thread in enumerate(data):
                         try:
-                            # Process and index thread
-                            processed_posts = process_thread(thread, index, embeddings)
-                            total_posts += processed_posts
+                            # Log pre-processing
+                            logger.info(f"Processing thread {i+1}/{len(data)}: {thread.get('title', 'Unknown')}")
+                            logger.info(f"Thread has {len(thread.get('posts', []))} posts")
+                            
+                            # Process thread
+                            processed_docs = process_thread(thread)
+                            
+                            # Log post-processing
+                            logger.info(f"Generated {len(processed_docs)} documents for thread")
+                            
+                            # Genera embeddings e indicizza
+                            for doc in processed_docs:
+                                try:
+                                    embedding = embeddings.embed_query(doc["text"])
+                                    
+                                    # Verifica metadati prima dell'inserimento
+                                    logger.info(f"Document metadata: {doc['metadata']}")
+                                    
+                                    # Upsert con verifica
+                                    response = index.upsert(
+                                        vectors=[{
+                                            "id": doc["id"],
+                                            "values": embedding,
+                                            "metadata": doc["metadata"]
+                                        }]
+                                    )
+                                    
+                                    total_vectors += 1
+                                    logger.info(f"Successfully indexed document {doc['id']}")
+                                    
+                                except Exception as e:
+                                    logger.error(f"Error indexing document: {str(e)}")
+                                    continue
+                            
+                            total_posts += len(thread['posts'])
                             
                             # Update progress
                             current_progress = (i + 1) / len(data)
@@ -706,19 +745,23 @@ def process_uploaded_file(uploaded_file, index, embeddings):
                             st.markdown(f"""
                             Processing thread: {i+1}/{len(data)}
                             - Title: {thread['title']}
-                            - Posts processed: {processed_posts}
-                            - Total posts so far: {total_posts}
+                            - Posts processed: {len(processed_docs)}
+                            - Total vectors indexed: {total_vectors}
                             """)
                             
                         except Exception as e:
                             logger.error(f"Error processing thread {i}: {str(e)}")
                             st.error(f"Error processing thread {thread.get('title', 'unknown')}: {str(e)}")
                             continue
-
+                    
+                    # Verifica finale
+                    stats = index.describe_index_stats()
+                    logger.info(f"Final index stats: {stats}")
+                    
                     # Clear progress bar
                     progress.empty()
                     
-                    st.success(f"Successfully processed {len(data)} threads with {total_posts} total posts")
+                    st.success(f"Successfully processed {len(data)} threads with {total_posts} total posts. Indexed {total_vectors} vectors.")
                     
                     # Aggiungi un piccolo delay per permettere all'indice di aggiornarsi
                     time.sleep(2)
@@ -735,8 +778,8 @@ def process_uploaded_file(uploaded_file, index, embeddings):
                     st.rerun()
                     
                 except Exception as e:
+                    logger.error(f"Error processing file: {str(e)}")
                     st.error(f"Error processing file: {str(e)}")
-                    logger.error(f"File processing error: {str(e)}")
                     
     return st.session_state.processed_threads if 'processed_threads' in st.session_state else set()
 
