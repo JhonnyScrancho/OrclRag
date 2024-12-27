@@ -1,10 +1,11 @@
-# retriever.py
 import streamlit as st
 from typing import List, Dict, Any
 from langchain_core.documents import Document
 import logging
 from datetime import datetime
 from config import EMBEDDING_DIMENSION
+import json
+from operator import itemgetter
 
 logger = logging.getLogger(__name__)
 
@@ -13,15 +14,14 @@ class SmartRetriever:
         self.index = index
         self.embeddings = embeddings
         self.MAX_DOCUMENTS = 10000
-        self.EMBEDDING_DIMENSION = EMBEDDING_DIMENSION   # Set explicitly to match index dimension
+        self.EMBEDDING_DIMENSION = EMBEDDING_DIMENSION
 
-    def get_all_documents(self) -> List[Any]:
-        """Retrieve all documents from the index using a properly dimensioned query vector."""
+    def get_all_documents(self) -> List[Document]:
+        """Retrieve and reconstruct all documents from the index."""
         try:
             # Create a zero vector with correct dimension
-            query_vector = [0.0] * EMBEDDING_DIMENSION
-            # Set first element to 1.0 to ensure non-zero vector
-            query_vector[0] = 1.0
+            query_vector = [0.0] * self.EMBEDDING_DIMENSION
+            query_vector[0] = 1.0  # Set first element to 1.0 to ensure non-zero vector
             
             results = self.index.query(
                 vector=query_vector,
@@ -32,8 +32,45 @@ class SmartRetriever:
             if not results.matches:
                 logger.warning("No documents found in index")
                 return []
+            
+            # Raggruppa i chunks per post_id
+            grouped_chunks = {}
+            for match in results.matches:
+                post_id = match.metadata.get("post_id", "unknown")
+                if post_id not in grouped_chunks:
+                    grouped_chunks[post_id] = []
+                grouped_chunks[post_id].append(match)
+            
+            # Ricostruisci i documenti completi
+            complete_documents = []
+            for post_chunks in grouped_chunks.values():
+                # Ordina i chunks per numero
+                post_chunks.sort(key=lambda x: x.metadata.get("chunk_number", 0))
                 
-            return results.matches
+                # Usa il testo originale completo se disponibile, altrimenti ricostruisci dai chunks
+                if "text" in post_chunks[0].metadata:
+                    complete_text = post_chunks[0].metadata["text"]
+                else:
+                    complete_text = " ".join(chunk.metadata.get("chunk_text", "") for chunk in post_chunks)
+                
+                # Prendi i metadati dal primo chunk e rimuovi i campi specifici del chunking
+                metadata = post_chunks[0].metadata.copy()
+                metadata.pop("chunk_number", None)
+                metadata.pop("total_chunks", None)
+                metadata.pop("chunk_text", None)
+                
+                complete_documents.append(Document(
+                    page_content=complete_text,
+                    metadata=metadata
+                ))
+            
+            # Ordina per timestamp se possibile
+            try:
+                complete_documents.sort(key=lambda x: datetime.fromisoformat(x.metadata.get("post_time", "1970-01-01T00:00:00+00:00")))
+            except (ValueError, TypeError) as e:
+                logger.warning(f"Could not sort documents by timestamp: {e}")
+            
+            return complete_documents
             
         except Exception as e:
             logger.error(f"Error fetching documents: {str(e)}")
@@ -55,9 +92,9 @@ class SmartRetriever:
         return formatted
 
     def get_relevant_documents(self, query: str) -> List[Document]:
-        """Retrieve relevant documents using proper embeddings."""
+        """Retrieve relevant documents using semantic search."""
         try:
-            # Generate query embedding using the embeddings model
+            # Generate query embedding
             query_embedding = self.embeddings.embed_query(query)
             
             # Verify embedding dimension
@@ -74,26 +111,41 @@ class SmartRetriever:
             if not results.matches:
                 return [Document(page_content="No documents found", metadata={"type": "error"})]
             
-            # Convert matches to Documents
-            documents = []
+            # Raggruppa i chunks per post_id
+            grouped_chunks = {}
             for match in results.matches:
-                metadata = self._format_metadata(match.metadata)
-                doc = Document(
-                    page_content=metadata["text"],
-                    metadata=metadata
-                )
-                documents.append(doc)
+                post_id = match.metadata.get("post_id", "unknown")
+                if post_id not in grouped_chunks:
+                    grouped_chunks[post_id] = []
+                grouped_chunks[post_id].append(match)
             
-            # Sort by timestamp
-            try:
-                documents.sort(key=lambda x: datetime.strptime(
-                    x.metadata["post_time"], 
-                    "%Y-%m-%dT%H:%M:%S%z"
+            # Ricostruisci i documenti completi
+            relevant_documents = []
+            for post_chunks in grouped_chunks.values():
+                # Ordina i chunks per numero
+                post_chunks.sort(key=lambda x: x.metadata.get("chunk_number", 0))
+                
+                # Usa il testo originale se disponibile
+                if "text" in post_chunks[0].metadata:
+                    complete_text = post_chunks[0].metadata["text"]
+                else:
+                    complete_text = " ".join(chunk.metadata.get("chunk_text", "") for chunk in post_chunks)
+                
+                # Prendi i metadati dal primo chunk e rimuovi i campi del chunking
+                metadata = self._format_metadata(post_chunks[0].metadata)
+                
+                relevant_documents.append(Document(
+                    page_content=complete_text,
+                    metadata=metadata
                 ))
+            
+            # Ordina per timestamp
+            try:
+                relevant_documents.sort(key=lambda x: datetime.fromisoformat(x.metadata["post_time"]))
             except (ValueError, TypeError):
                 logger.warning("Unable to sort documents by timestamp")
             
-            return documents
+            return relevant_documents
             
         except Exception as e:
             logger.error(f"Error in retrieval: {str(e)}")
