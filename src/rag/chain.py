@@ -23,6 +23,12 @@ Nel rispondere, presta particolare attenzione a:
 3. Interpretare correttamente il contesto temporale dei post
 4. Evidenziare le citazioni rilevanti quando rispondi
 
+Usa la formattazione per rendere le risposte più leggibili:
+- Usa **grassetto** per nomi degli utenti quando li citi
+- Usa > per mostrare le citazioni dei post
+- Usa *corsivo* per evidenziare date e timestamp
+- Usa --- per separare sezioni diverse se necessario
+
 Dati del forum:
 {context}
 
@@ -35,7 +41,7 @@ REGOLE:
 1. Rispondi SOLO a ciò che viene chiesto
 2. Sii breve e diretto
 3. Per domande numeriche, dai prima il numero e poi solo insight essenziali
-4. Se rilevi citazioni, indicale esplicitamente
+4. Se rilevi citazioni, indicale esplicitamente usando il formato > 
 5. Non fare analisi non richieste"""
     
     def get_response(query_input):
