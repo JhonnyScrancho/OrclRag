@@ -695,8 +695,26 @@ def process_uploaded_file(uploaded_file, index, embeddings):
                     # Processa ogni thread
                     for i, thread in enumerate(data):
                         try:
-                            # Process and index thread
-                            processed_posts = process_thread(thread, index, embeddings)
+                            # Process thread - usa solo thread come argomento
+                            texts = process_thread(thread)
+                            # Crea chunks e indicizza
+                            chunks = create_chunks(texts)
+                            processed_posts = 0
+                            
+                            for j, chunk in enumerate(chunks):
+                                thread_id = get_thread_id(thread)
+                                chunk_id = f"{thread_id}_{j}"
+                                embedding = embeddings.embed_query(chunk.page_content)
+                                metadata = {
+                                    "thread_id": thread_id,
+                                    "thread_title": thread['title'],
+                                    "url": thread['url'],
+                                    "scrape_time": thread['scrape_time'],
+                                    "text": chunk.page_content
+                                }
+                                update_document_in_index(index, chunk_id, embedding, metadata)
+                                processed_posts += 1
+                            
                             total_posts += processed_posts
                             
                             # Update progress
@@ -739,7 +757,6 @@ def process_uploaded_file(uploaded_file, index, embeddings):
                     logger.error(f"File processing error: {str(e)}")
                     
     return st.session_state.processed_threads if 'processed_threads' in st.session_state else set()
-
 
 class RateLimiter:
     def __init__(self):
