@@ -254,6 +254,7 @@ def display_chat_interface(index, embeddings):
     
     st.markdown('</div>', unsafe_allow_html=True)
 
+
 def display_database_view(index):
     """Visualizzazione e gestione del database."""
     st.header("📊 Database Management")
@@ -272,7 +273,6 @@ def display_database_view(index):
     if st.button("📥 Load Documents", use_container_width=True):
         with st.spinner("Loading documents..."):
             try:
-                # Usa la dimensione corretta dal config
                 dimension = stats['dimension']
                 query_vector = [0.0] * dimension
                 query_vector[0] = 1.0
@@ -287,7 +287,7 @@ def display_database_view(index):
                     st.info("No documents found in the database")
                     return
                 
-                # Processa i risultati in modo strutturato
+                # Raggruppa i documenti per thread
                 threads_data = {}
                 for doc in results.matches:
                     thread_id = doc.metadata.get('thread_id')
@@ -297,15 +297,19 @@ def display_database_view(index):
                             'Title': doc.metadata.get('thread_title'),
                             'URL': doc.metadata.get('url'),
                             'Posts': [],
-                            'Total Posts': doc.metadata.get('total_posts', 0)
+                            'Total Posts': 0  # Sarà aggiornato dopo
                         }
                     
-                    # Estrai il contenuto del post dal testo
+                    # Estrai il contenuto del post
                     text = doc.metadata.get('text', '')
                     post_data = parse_post_content(text)
                     
-                    if post_data:
+                    if post_data and is_valid_post(post_data):
                         threads_data[thread_id]['Posts'].append(post_data)
+                
+                # Aggiorna il conteggio totale dei post per ogni thread
+                for thread_data in threads_data.values():
+                    thread_data['Total Posts'] = len(thread_data['Posts'])
                 
                 # Crea DataFrame per la vista principale
                 threads_list = []
@@ -363,18 +367,21 @@ def display_database_view(index):
                 st.exception(e)
 
 def parse_post_content(text):
-    """Estrae i metadati dal testo del post."""
+    """Estrae i metadati dal testo del post con gestione migliorata delle citazioni."""
     lines = text.strip().split('\n')
     post_data = {
         'author': '',
         'time': '',
         'content': '',
         'quoted_author': '',
-        'quoted_content': ''
+        'quoted_content': '',
+        'keywords': [],
+        'sentiment': 0.0
     }
     
+    content_buffer = []
+    quote_buffer = []
     current_section = None
-    content_lines = []
     
     for line in lines:
         line = line.strip()
@@ -385,29 +392,68 @@ def parse_post_content(text):
             post_data['author'] = line.replace('Author:', '').strip()
         elif line.startswith('Time:'):
             post_data['time'] = line.replace('Time:', '').strip()
-        elif line.startswith('Quoted Author:'):
-            post_data['quoted_author'] = line.replace('Quoted Author:', '').strip()
-        elif line.startswith('Quoted Content:'):
-            post_data['quoted_content'] = line.replace('Quoted Content:', '').strip()
+        elif ' said:' in line and 'Click to expand...' in text:
+            # Gestisce il formato di citazione standard del forum
+            parts = line.split(' said:', 1)
+            if len(parts) == 2:
+                post_data['quoted_author'] = parts[0].strip()
+                quote_start = text.index(' said:') + 6
+                quote_end = text.index('Click to expand...')
+                post_data['quoted_content'] = text[quote_start:quote_end].strip()
+                # Il contenuto effettivo inizia dopo 'Click to expand...'
+                content_start = text.index('Click to expand...') + 17
+                post_data['content'] = text[content_start:].strip()
+                break  # Abbiamo trovato tutto quello che ci serve
         elif line.startswith('Content:'):
             current_section = 'content'
+        elif line.startswith('Keywords:'):
+            current_section = 'keywords'
+            post_data['keywords'] = [k.strip() for k in line.replace('Keywords:', '').split(',')]
+        elif line.startswith('Sentiment:'):
+            try:
+                post_data['sentiment'] = float(line.replace('Sentiment:', '').strip())
+            except ValueError:
+                pass
         elif current_section == 'content':
-            if not line.startswith('Keywords:') and not line.startswith('Sentiment:'):
-                content_lines.append(line)
+            content_buffer.append(line)
     
-    post_data['content'] = ' '.join(content_lines).strip()
+    # Se non abbiamo trovato citazioni nel formato standard
+    if not post_data['content'] and content_buffer:
+        post_data['content'] = ' '.join(content_buffer).strip()
+    
     return post_data
 
+def is_valid_post(post_data):
+    """Verifica se un post contiene i dati minimi necessari."""
+    return (
+        post_data.get('author') and 
+        post_data.get('time') and 
+        (post_data.get('content') or post_data.get('quoted_content'))
+    )
+
 def format_post_content(post):
-    """Formatta il contenuto del post con citazioni se presenti."""
+    """Formatta il contenuto del post con citazioni in modo più pulito."""
     formatted_content = ""
     
+    # Aggiungi la citazione solo se presente e non vuota
     if post['quoted_author'] and post['quoted_content']:
-        formatted_content += f"> **{post['quoted_author']} wrote:**  \n> {post['quoted_content']}\n\n"
+        formatted_content += f"> **{post['quoted_author']} wrote:**  \n> {post['quoted_content'].strip()}\n\n"
     
-    formatted_content += post['content']
+    # Aggiungi il contenuto principale
+    if post['content']:
+        # Rimuovi eventuali citazioni duplicate nel contenuto
+        content = post['content']
+        if post['quoted_content']:
+            content = content.replace(post['quoted_content'], '').strip()
+        formatted_content += content
+    
+    # Aggiungi keywords e sentiment se presenti
+    if post['keywords']:
+        formatted_content += f"\n\n*Keywords: {', '.join(post['keywords'])}*"
+    if post['sentiment'] != 0.0:
+        formatted_content += f"\n*Sentiment: {post['sentiment']}*"
+    
     return formatted_content
-
 
 def process_uploaded_file(uploaded_file, index, embeddings):
     """Process uploaded JSON file with button in sidebar."""
