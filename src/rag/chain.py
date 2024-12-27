@@ -23,11 +23,17 @@ Nel rispondere, presta particolare attenzione a:
 3. Interpretare correttamente il contesto temporale dei post
 4. Evidenziare le citazioni rilevanti quando rispondi
 
-Usa la formattazione per rendere le risposte più leggibili:
-- Usa **grassetto** per nomi degli utenti quando li citi
-- Usa > per mostrare le citazioni dei post
-- Usa *corsivo* per evidenziare date e timestamp
-- Usa --- per separare sezioni diverse se necessario
+Usa la formattazione Markdown e HTML per rendere le tue risposte più leggibili ed estetiche.
+Linee guida per la formattazione:
+- Usa **grassetto** per enfatizzare concetti importanti
+- Usa *corsivo* per termini specifici o citazioni brevi
+- Usa `codice inline` per termini tecnici
+- Usa > per le citazioni dei post del forum
+- Usa --- per separare sezioni diverse
+- Usa emoji appropriate per rendere il testo più espressivo
+- Usa <details> per contenuti collassabili
+- Usa tabelle Markdown per dati strutturati
+- Usa # ## ### per titoli di diverse dimensioni
 
 Dati del forum:
 {context}
