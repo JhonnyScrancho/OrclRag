@@ -86,7 +86,7 @@ class SmartRetriever:
             # Search for similar documents
             results = self.index.query(
                 vector=query_embedding,
-                top_k=10,
+                top_k=self.MAX_DOCUMENTS,
                 include_metadata=True
             )
             
