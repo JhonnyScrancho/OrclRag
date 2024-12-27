@@ -1,10 +1,7 @@
-# generator.py
-
-from xml.dom.minidom import Document
 from sentence_transformers import SentenceTransformer
 import torch
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from config import CHUNK_OVERLAP, CHUNK_SIZE, EMBEDDING_DIMENSION, EMBEDDING_MODEL
+from langchain_core.documents import Document
+from config import EMBEDDING_DIMENSION, EMBEDDING_MODEL
 import logging
 
 logger = logging.getLogger(__name__)
