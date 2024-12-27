@@ -70,30 +70,6 @@ def create_chunks(texts):
     
     return chunks
 
-def remove_duplicates(index):
-    """Rimuove eventuali duplicati dal database."""
-    try:
-        # Query per tutti i documenti
-        results = index.query(
-            vector=[0.0] * EMBEDDING_DIMENSION,
-            top_k=10000,
-            include_metadata=True
-        )
-        
-        seen = {}
-        duplicates = []
-        for match in results.matches:
-            key = f"{match.metadata['thread_id']}_{match.metadata['post_id']}"
-            if key in seen:
-                duplicates.append(match.id)
-            seen[key] = True
-            
-        if duplicates:
-            index.delete(ids=duplicates)
-            logger.info(f"Removed {len(duplicates)} duplicate vectors")
-    except Exception as e:
-        logger.error(f"Error removing duplicates: {str(e)}")
-
 def get_embeddings():
     """Inizializza il modello embeddings con logging dettagliato."""
     try:
