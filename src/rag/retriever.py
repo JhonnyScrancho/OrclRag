@@ -19,9 +19,11 @@ class SmartRetriever:
     def get_all_documents(self) -> List[Document]:
         """Retrieve and reconstruct all documents from the index."""
         try:
-            # Create a zero vector with correct dimension
+            # Create a query that will match all documents
             query_vector = [0.0] * self.EMBEDDING_DIMENSION
             query_vector[0] = 1.0  # Set first element to 1.0 to ensure non-zero vector
+            
+            logger.info("Retrieving all documents from index...")
             
             results = self.index.query(
                 vector=query_vector,
@@ -70,6 +72,7 @@ class SmartRetriever:
             except (ValueError, TypeError) as e:
                 logger.warning(f"Could not sort documents by timestamp: {e}")
             
+            logger.info(f"Retrieved and reconstructed {len(complete_documents)} documents")
             return complete_documents
             
         except Exception as e:
