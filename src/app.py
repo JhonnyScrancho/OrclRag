@@ -1,7 +1,6 @@
 import streamlit as st
-from config import EMBEDDING_DIMENSION, INDEX_NAME, LLM_MODEL 
-from data.loader import load_json
-from data.processor import process_thread
+from config import EMBEDDING_DIMENSION, INDEX_NAME, LLM_MODEL
+from data import load_json, process_thread
 from embeddings.generator import create_chunks, get_embeddings
 from embeddings.indexer import PineconeManager, update_document_in_index
 from rag.retriever import SmartRetriever
@@ -11,7 +10,6 @@ import time
 from datetime import datetime, timedelta
 from pinecone import Pinecone
 from ui.styles import apply_custom_styles, render_sidebar
-from config import INDEX_NAME
 import pandas as pd
 import logging
 from functools import wraps
