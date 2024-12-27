@@ -259,6 +259,14 @@ def display_database_view(index):
     """Visualizzazione e gestione del database."""
     st.header("📊 Database Management")
     
+    # Initialize session states
+    if 'selected_thread' not in st.session_state:
+        st.session_state.selected_thread = None
+    if 'threads_data' not in st.session_state:
+        st.session_state.threads_data = None
+    if 'filtered_df' not in st.session_state:
+        st.session_state.filtered_df = None
+    
     try:
         stats = index.describe_index_stats()
         col1, col2 = st.columns(2)
@@ -267,113 +275,115 @@ def display_database_view(index):
         with col2:
             st.metric("Dimension", stats['dimension'])
             
-        if 'selected_thread' not in st.session_state:
-            st.session_state.selected_thread = None
-            
     except Exception as e:
         st.error(f"Error retrieving database stats: {str(e)}")
         return
 
-    if st.button("📥 Load Documents", use_container_width=True):
-        with st.spinner("Loading documents..."):
-            try:
-                # Usa la dimensione corretta dal config
-                dimension = stats['dimension']
-                query_vector = [0.0] * dimension
-                query_vector[0] = 1.0
-                
-                results = index.query(
-                    vector=query_vector,
-                    top_k=10000,
-                    include_metadata=True
-                )
-                
-                if not results.matches:
-                    st.info("No documents found in the database")
-                    return
-                
-                # Processa i risultati in modo strutturato
-                threads_data = {}
-                for doc in results.matches:
-                    thread_id = doc.metadata.get('thread_id')
-                    if thread_id not in threads_data:
-                        threads_data[thread_id] = {
-                            'Thread ID': thread_id,
-                            'Title': doc.metadata.get('thread_title'),
-                            'URL': doc.metadata.get('url'),
-                            'Posts': [],
-                        }
+    if st.button("📥 Load Documents", use_container_width=True) or st.session_state.threads_data is not None:
+        if st.session_state.threads_data is None:  # Solo se i dati non sono già caricati
+            with st.spinner("Loading documents..."):
+                try:
+                    dimension = stats['dimension']
+                    query_vector = [0.0] * dimension
+                    query_vector[0] = 1.0
                     
-                    # Estrai il contenuto del post dal testo
-                    text = doc.metadata.get('text', '')
-                    post_data = parse_post_content(text)
-                    
-                    if post_data:
-                        threads_data[thread_id]['Posts'].append(post_data)
-                        
-                # Calcola il totale dei post per ogni thread
-                for thread_id in threads_data:
-                    threads_data[thread_id]['Total Posts'] = len(threads_data[thread_id]['Posts'])
-                
-                # Crea DataFrame per la vista principale
-                threads_list = []
-                for thread_data in threads_data.values():
-                    threads_list.append({
-                        'Thread ID': thread_data['Thread ID'],
-                        'Title': thread_data['Title'],
-                        'URL': thread_data['URL'],
-                        'Total Posts': thread_data['Total Posts']
-                    })
-                
-                df = pd.DataFrame(threads_list)
-                
-                # Filtri
-                st.subheader("🔍 Filters")
-                col1, col2 = st.columns(2)
-                with col1:
-                    title_filter = st.multiselect(
-                        "Filter by Title",
-                        options=sorted(df['Title'].unique())
+                    results = index.query(
+                        vector=query_vector,
+                        top_k=10000,
+                        include_metadata=True
                     )
-                
-                # Applica filtri
-                filtered_df = df.copy()
-                if title_filter:
-                    filtered_df = filtered_df[filtered_df['Title'].isin(title_filter)]
-                
-                # Lista thread
-                st.subheader("📋 Thread List")
-                
-                # Visualizza i thread con expander
-                for index, row in filtered_df.iterrows():
-                    thread_id = row['Thread ID']
-                    thread_data = threads_data[thread_id]
                     
-                    # Crea un expander per ogni thread
-                    with st.expander(f"🧵 {thread_data['Title']} ({thread_data['Total Posts']} posts)", 
-                                   expanded=(st.session_state.selected_thread == thread_id)):
-                        # Mostra URL del thread
-                        st.markdown(f"🔗 [Thread URL]({thread_data['URL']})")
+                    if not results.matches:
+                        st.info("No documents found in the database")
+                        return
+                    
+                    # Processa i risultati
+                    threads_data = {}
+                    for doc in results.matches:
+                        thread_id = doc.metadata.get('thread_id')
+                        if thread_id not in threads_data:
+                            threads_data[thread_id] = {
+                                'Thread ID': thread_id,
+                                'Title': doc.metadata.get('thread_title'),
+                                'URL': doc.metadata.get('url'),
+                                'Posts': [],
+                            }
                         
-                        # Mostra i dettagli solo se l'expander è stato selezionato
-                        if st.session_state.selected_thread == thread_id:
-                            for post in thread_data['Posts']:
-                                st.markdown(f"""
-                                **Author:** {post['author']}  
-                                **Time:** {post['time']}  
-                                
-                                {format_post_content(post)}
-                                ---
-                                """)
-                        else:
-                            # Aggiungi un pulsante per caricare i dettagli
-                            if st.button(f"Load Posts", key=f"load_{thread_id}"):
-                                st.session_state.selected_thread = thread_id
-                                st.rerun()
+                        text = doc.metadata.get('text', '')
+                        post_data = parse_post_content(text)
+                        
+                        if post_data:
+                            threads_data[thread_id]['Posts'].append(post_data)
+                    
+                    # Calcola totali
+                    for thread_id in threads_data:
+                        threads_data[thread_id]['Total Posts'] = len(threads_data[thread_id]['Posts'])
+                    
+                    # Salva i dati nello state
+                    st.session_state.threads_data = threads_data
+                    
+                    # Crea DataFrame
+                    threads_list = []
+                    for thread_data in threads_data.values():
+                        threads_list.append({
+                            'Thread ID': thread_data['Thread ID'],
+                            'Title': thread_data['Title'],
+                            'URL': thread_data['URL'],
+                            'Total Posts': thread_data['Total Posts']
+                        })
+                    
+                    st.session_state.filtered_df = pd.DataFrame(threads_list)
+                    
+                except Exception as e:
+                    st.error(f"Error fetching documents: {str(e)}")
+                    st.exception(e)
+                    return
+        
+        # Mostra i filtri e la lista solo se abbiamo dati
+        if st.session_state.filtered_df is not None:
+            # Filtri
+            st.subheader("🔍 Filters")
+            col1, col2 = st.columns(2)
+            with col1:
+                title_filter = st.multiselect(
+                    "Filter by Title",
+                    options=sorted(st.session_state.filtered_df['Title'].unique())
+                )
+            
+            # Applica filtri
+            filtered_df = st.session_state.filtered_df.copy()
+            if title_filter:
+                filtered_df = filtered_df[filtered_df['Title'].isin(title_filter)]
+            
+            # Lista thread
+            st.subheader("📋 Thread List")
+            
+            # Visualizza thread con expander
+            for index, row in filtered_df.iterrows():
+                thread_id = row['Thread ID']
+                thread_data = st.session_state.threads_data[thread_id]
+                
+                with st.expander(
+                    f"🧵 {thread_data['Title']} ({thread_data['Total Posts']} posts)", 
+                    expanded=(st.session_state.selected_thread == thread_id)
+                ):
+                    st.markdown(f"🔗 [Thread URL]({thread_data['URL']})")
+                    
+                    if st.session_state.selected_thread == thread_id:
+                        st.button("Hide Posts", key=f"hide_{thread_id}", 
+                                 on_click=lambda: setattr(st.session_state, 'selected_thread', None))
+                        
+                        for post in thread_data['Posts']:
+                            st.markdown(f"""
+                            **Author:** {post['author']}  
+                            **Time:** {post['time']}  
                             
-            except Exception as e:
-                st.error(f"Error fetching documents: {str(e)}")
-                st.exception(e)
+                            {format_post_content(post)}
+                            ---
+                            """)
+                    else:
+                        st.button("Load Posts", key=f"load_{thread_id}", 
+                                 on_click=lambda tid=thread_id: setattr(st.session_state, 'selected_thread', tid))
 
 def parse_post_content(text):
     """Estrae i metadati dal testo del post."""
