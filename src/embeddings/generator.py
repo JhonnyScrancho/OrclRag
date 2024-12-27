@@ -1,5 +1,6 @@
 # generator.py
 
+from xml.dom.minidom import Document
 from sentence_transformers import SentenceTransformer
 import torch
 from langchain.text_splitter import RecursiveCharacterTextSplitter
@@ -55,15 +56,18 @@ class SentenceTransformersEmbeddings:
             raise
 
 def create_chunks(texts):
-    """Divide i testi in chunks."""
-    text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=CHUNK_SIZE,
-        chunk_overlap=CHUNK_OVERLAP,
-        separators=["\n\n", "\n", ".", "?", "!", " ", ""]  # Migliore gestione dei separatori
-    )
-    chunks = text_splitter.create_documents(texts)
+    """Divide i testi in chunks mantenendo l'integrità dei post."""
+    chunks = []
     
-    # Aggiungi logging per debug
+    for text in texts:
+        # Crea un nuovo Document per ogni post
+        chunk = Document(
+            page_content=text,
+            metadata={}  # I metadati verranno aggiunti dopo
+        )
+        chunks.append(chunk)
+    
+    # Log per debug
     logger.info(f"Created {len(chunks)} chunks from {len(texts)} texts")
     for i, chunk in enumerate(chunks):
         logger.debug(f"Chunk {i}: {len(chunk.page_content)} chars")
