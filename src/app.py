@@ -310,14 +310,24 @@ def display_database_view(index):
                             }
                         
                         text = doc.metadata.get('text', '')
+                        post_id = doc.metadata.get('post_id', '')
+                        
+                        # Se il post_id esiste già per questo thread, skippa
+                        if post_id in threads_data[thread_id].get('processed_post_ids', set()):
+                            continue
+                            
                         post_data = parse_post_content(text)
                         
                         if post_data:
+                            if 'processed_post_ids' not in threads_data[thread_id]:
+                                threads_data[thread_id]['processed_post_ids'] = set()
+                                
+                            threads_data[thread_id]['processed_post_ids'].add(post_id)
                             threads_data[thread_id]['Posts'].append(post_data)
                     
-                    # Calcola totali
+                    # Calcola totali usando i post_id unici
                     for thread_id in threads_data:
-                        threads_data[thread_id]['Total Posts'] = len(threads_data[thread_id]['Posts'])
+                        threads_data[thread_id]['Total Posts'] = len(threads_data[thread_id]['processed_post_ids'])
                     
                     # Salva i dati nello state
                     st.session_state.threads_data = threads_data
@@ -393,7 +403,8 @@ def parse_post_content(text):
         'time': '',
         'content': '',
         'quoted_author': '',
-        'quoted_content': ''
+        'quoted_content': '',
+        'post_id': ''  # Aggiungiamo il campo post_id
     }
     
     current_section = None
