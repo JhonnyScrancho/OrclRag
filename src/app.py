@@ -266,6 +266,10 @@ def display_database_view(index):
             st.metric("Total Documents", stats['total_vector_count'])
         with col2:
             st.metric("Dimension", stats['dimension'])
+            
+        if 'selected_thread' not in st.session_state:
+            st.session_state.selected_thread = None
+            
     except Exception as e:
         st.error(f"Error retrieving database stats: {str(e)}")
         return
@@ -298,7 +302,6 @@ def display_database_view(index):
                             'Title': doc.metadata.get('thread_title'),
                             'URL': doc.metadata.get('url'),
                             'Posts': [],
-                            'Total Posts': doc.metadata.get('total_posts', 0)
                         }
                     
                     # Estrai il contenuto del post dal testo
@@ -307,6 +310,10 @@ def display_database_view(index):
                     
                     if post_data:
                         threads_data[thread_id]['Posts'].append(post_data)
+                        
+                # Calcola il totale dei post per ogni thread
+                for thread_id in threads_data:
+                    threads_data[thread_id]['Total Posts'] = len(threads_data[thread_id]['Posts'])
                 
                 # Crea DataFrame per la vista principale
                 threads_list = []
@@ -336,28 +343,33 @@ def display_database_view(index):
                 
                 # Lista thread
                 st.subheader("📋 Thread List")
-                selected_rows = st.data_editor(
-                    filtered_df,
-                    hide_index=True,
-                    use_container_width=True,
-                    num_rows="dynamic"
-                )
                 
-                # Dettagli thread selezionato
-                if selected_rows is not None and len(selected_rows) > 0:
-                    selected_thread_id = selected_rows.iloc[0]['Thread ID']
-                    thread_data = threads_data[selected_thread_id]
+                # Visualizza i thread con expander
+                for index, row in filtered_df.iterrows():
+                    thread_id = row['Thread ID']
+                    thread_data = threads_data[thread_id]
                     
-                    st.subheader("📝 Thread Details")
-                    with st.expander("Posts", expanded=True):
-                        for post in thread_data['Posts']:
-                            st.markdown(f"""
-                            **Author:** {post['author']}  
-                            **Time:** {post['time']}  
-                            
-                            {format_post_content(post)}
-                            ---
-                            """)
+                    # Crea un expander per ogni thread
+                    with st.expander(f"🧵 {thread_data['Title']} ({thread_data['Total Posts']} posts)", 
+                                   expanded=(st.session_state.selected_thread == thread_id)):
+                        # Mostra URL del thread
+                        st.markdown(f"🔗 [Thread URL]({thread_data['URL']})")
+                        
+                        # Mostra i dettagli solo se l'expander è stato selezionato
+                        if st.session_state.selected_thread == thread_id:
+                            for post in thread_data['Posts']:
+                                st.markdown(f"""
+                                **Author:** {post['author']}  
+                                **Time:** {post['time']}  
+                                
+                                {format_post_content(post)}
+                                ---
+                                """)
+                        else:
+                            # Aggiungi un pulsante per caricare i dettagli
+                            if st.button(f"Load Posts", key=f"load_{thread_id}"):
+                                st.session_state.selected_thread = thread_id
+                                st.rerun()
                             
             except Exception as e:
                 st.error(f"Error fetching documents: {str(e)}")
