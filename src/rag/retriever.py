@@ -92,93 +92,63 @@ class SmartRetriever:
     def get_relevant_documents(self, query: str) -> List[Document]:
         """Enhanced document retrieval with complete thread fetching."""
         try:
-            logger.info(f"Starting document retrieval for query: {query}")
-            
-            # Verifica stato dell'indice
-            stats = self.index.describe_index_stats()
-            logger.info(f"Current index stats: {stats}")
-            
             # Generate query embedding
             query_embedding = self.embeddings.embed_query(query)
-            logger.info("Generated query embedding")
             
-            # Prima query per trovare i thread rilevanti
-            initial_results = self.index.query(
+            # Aumentiamo il top_k e rimuoviamo filtri troppo restrittivi
+            results = self.index.query(
                 vector=query_embedding,
-                top_k=100,  # Aumentato per trovare più thread rilevanti
+                top_k=100,  # Aumentato da 10
                 include_metadata=True
             )
-            
-            if not initial_results.matches:
+
+            if not results.matches:
                 logger.warning("No initial matches found")
                 return []
+
+            # Aggiungiamo logging per debug
+            logger.info(f"Found {len(results.matches)} initial matches")
+
+            # Collect unique thread IDs
+            thread_ids = {doc.metadata.get("thread_id") for doc in results.matches if doc.metadata}
+            logger.info(f"Found {len(thread_ids)} unique threads")
             
-            # Log dei risultati iniziali
-            logger.info(f"Found {len(initial_results.matches)} initial matches")
-            for match in initial_results.matches[:5]:  # Log primi 5 risultati
-                logger.info(f"Match ID: {match.id}, Score: {match.score}, Metadata: {match.metadata}")
-            
-            # Raccoglie thread_id unici
-            thread_ids = {
-                doc.metadata.get("thread_id") 
-                for doc in initial_results.matches 
-                if doc.metadata and doc.metadata.get("thread_id")
-            }
-            logger.info(f"Found {len(thread_ids)} unique threads: {thread_ids}")
-            
-            # Recupera TUTTI i post per ogni thread
+            # Fetch ALL documents for each relevant thread
             all_documents = []
             for thread_id in thread_ids:
                 if not thread_id:
                     continue
-                
-                logger.info(f"Fetching posts for thread: {thread_id}")
-                
-                # Query specifica per il thread
+                    
+                # Query specifically for this thread to get ALL its posts
                 thread_results = self.index.query(
-                    vector=[0.0] * self.embeddings.dimension,  # Vector neutro
-                    filter={
-                        "thread_id": thread_id,
-                        "is_post": True  # Assicuriamoci di prendere solo i post
-                    },
-                    top_k=1000,  # Alto per prendere tutti i post
+                    vector=[1.0] + [0.0] * (self.embeddings.dimension - 1),
+                    filter={"thread_id": thread_id},
+                    top_k=1000,  # High number to get all posts
                     include_metadata=True
                 )
                 
                 if thread_results and thread_results.matches:
-                    thread_posts = thread_results.matches
-                    logger.info(f"Retrieved {len(thread_posts)} posts from thread {thread_id}")
-                    # Log dei primi post per debug
-                    for post in thread_posts[:2]:
-                        logger.info(f"Sample post metadata: {post.metadata}")
-                    all_documents.extend(thread_posts)
-                else:
-                    logger.warning(f"No posts found for thread {thread_id}")
-            
-            # Deduplicazione e conversione in Document
+                    all_documents.extend(thread_results.matches)
+                    logger.info(f"Retrieved {len(thread_results.matches)} posts from thread {thread_id}")
+
+            # Convert to Document objects with deduplication
             seen_post_ids = set()
             documents = []
             
             for doc in all_documents:
-                post_id = doc.metadata.get("unique_post_id")
-                if not post_id:
-                    logger.warning(f"Missing unique_post_id in metadata: {doc.metadata}")
+                post_id = doc.metadata.get("post_id")
+                if not post_id or post_id in seen_post_ids:
                     continue
                     
-                if post_id in seen_post_ids:
-                    logger.debug(f"Skipping duplicate post: {post_id}")
-                    continue
-                
                 seen_post_ids.add(post_id)
                 
-                # Crea Document con tutti i metadati
+                # Ensure all necessary metadata is included
                 documents.append(Document(
                     page_content=doc.metadata.get("text", ""),
                     metadata={
                         "thread_id": doc.metadata.get("thread_id"),
                         "thread_title": doc.metadata.get("thread_title"),
-                        "unique_post_id": post_id,
-                        "post_id": doc.metadata.get("post_id"),
+                        "post_id": post_id,
                         "author": doc.metadata.get("author"),
                         "post_time": doc.metadata.get("post_time"),
                         "total_posts": doc.metadata.get("total_posts"),
@@ -186,29 +156,29 @@ class SmartRetriever:
                         "sentiment": doc.metadata.get("sentiment", 0),
                         "keywords": doc.metadata.get("keywords", []),
                         "url": doc.metadata.get("url"),
-                        "content_length": doc.metadata.get("content_length"),
-                        "processing_time": doc.metadata.get("processing_time")
+                        "text": doc.metadata.get("text", "")
                     }
                 ))
-            
-            # Ordina cronologicamente
+
+            # Sort chronologically
             documents.sort(key=lambda x: x.metadata.get("post_time", ""))
             
-            # Log statistiche finali
+            # Log retrieval statistics
             logger.info(f"Retrieved and processed {len(documents)} total documents from {len(thread_ids)} threads")
             
-            # Log completezza thread
+            # Optional: calculate and log thread completeness
             for thread_id in thread_ids:
                 thread_posts = [d for d in documents if d.metadata.get("thread_id") == thread_id]
                 if thread_posts:
-                    declared = thread_posts[0].metadata.get("declared_posts", 0)
+                    declared = thread_posts[0].metadata.get("total_posts", 0)
                     found = len(thread_posts)
                     logger.info(f"Thread {thread_id}: found {found}/{declared} posts")
-            
+
             return documents
-            
+
         except Exception as e:
-            logger.error(f"Error in retrieval: {str(e)}", exc_info=True)
+            logger.error(f"Error in retrieval: {str(e)}")
+            st.error(f"Error retrieving documents: {str(e)}")
             return []
 
     def query_with_limit(self, query: str, limit: int = 5) -> List[Document]:

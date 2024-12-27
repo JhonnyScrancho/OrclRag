@@ -10,180 +10,49 @@ logger = logging.getLogger(__name__)
 
 class ForumMetadataManager:
     def __init__(self):
-        self.system_prompt = """Sei un analista esperto di forum specializzato nell'identificare trend, pattern e correlazioni tra discussioni correlate.
-Il tuo compito è analizzare approfonditamente thread multipli su un argomento specifico per fornire una comprensione completa del tema.
+        self.system_prompt = """Sei un assistente esperto nell'analisi di contenuti da forum.
+Il tuo compito è fornire risposte utili basate sui thread del forum disponibili.
+Se trovi informazioni parziali o incomplete, cerca comunque di fornire la migliore risposta possibile,
+specificando eventuali limitazioni nelle informazioni disponibili.
 
-CAPACITÀ CHIAVE:
-1. Analisi Multi-Thread
-   - Collega informazioni tra thread diversi
-   - Identifica opinioni ricorrenti e contrasti
-   - Traccia l'evoluzione delle discussioni nel tempo
-
-2. Comprensione Contestuale
-   - Analizza le citazioni per capire il flusso delle conversazioni
-   - Identifica gli utenti chiave e le loro prospettive
-   - Valuta il sentiment generale e come cambia nel tempo
-
-3. Sintesi e Pattern
-   - Evidenzia trend emergenti
-   - Identifica problemi ricorrenti
-   - Collega cause ed effetti tra discussioni diverse
-
-4. Analisi Temporale
-   - Traccia come le opinioni evolvono nel tempo
-   - Identifica cambiamenti significativi
-   - Correla eventi temporali tra thread diversi
-
-FOCUS SPECIFICI:
-- Cerca connessioni nascoste tra thread apparentemente separati
-- Identifica consensus e disaccordi tra gli utenti
-- Evidenzia come le esperienze si ripetono o differiscono
-- Analizza il contesto completo prima di trarre conclusioni
-
-APPROCCIO ALLE RISPOSTE:
-1. Fornisci una visione d'insieme dell'argomento
-2. Evidenzia pattern e trend significativi
-3. Supporta le conclusioni con esempi specifici dai thread
-4. Segnala eventuali limitazioni nei dati
-5. Suggerisci possibili correlazioni da investigare ulteriormente"""
+Quando rispondi:
+1. Usa tutte le informazioni disponibili, anche se parziali
+2. Specifica sempre il livello di confidenza nella risposta
+3. Se necessario, chiedi chiarimenti
+4. Suggerisci alternative se non puoi rispondere direttamente
+"""
 
     def build_conversation_prompt(self, context: str, query: str) -> str:
-        thread_stats = self._extract_thread_stats(context)
-        
+        # Estrai il conteggio dei threads e posts dal contesto
+        thread_count = context.count("THREAD:")
         return f"""QUERY: {query}
+
+ATTENZIONE: Il contesto contiene {thread_count} threads. Assicurati di analizzarli tutti.
 
 CONTESTO FORUM:
 {context}
 
-LINEE GUIDA PER L'ANALISI:
-1. Panoramica Generale
-   - Trend principali identificati
-   - Pattern ricorrenti
-   - Evoluzione temporale
+RICHIESTE SPECIFICHE:
+1. Conta e riporta SEMPRE il numero esatto di threads e posts
+2. Verifica la concordanza tra il numero di posts trovati e dichiarati
+3. Includi sempre il range temporale completo
+4. Rispondi poi alla query specifica
 
-2. Analisi delle Correlazioni
-   - Collegamenti tra thread
-   - Citazioni significative
-   - Opinioni contrastanti
+FORMAT0 RISPOSTA RICHIESTO:
+---
+RISPOSTA DIRETTA:
+Sono stati analizzati [X] threads contenenti [Y] posts.
+[Risposta alla query specifica]
 
-3. Insight Chiave
-   - Problemi ricorrenti
-   - Soluzioni proposte
-   - Esperienze comuni
+LIVELLO DI CONFIDENZA:
+[Alto/Medio/Basso] basato su:
+- Numero fonti: [X] threads, [Y] posts
+- Range temporale: [prima data - ultima data]
+- Sentiment medio: [valore]
 
-4. Contesto Temporale
-   - Cambiamenti nel tempo
-   - Eventi significativi
-   - Sviluppi recenti
-
-La tua risposta deve:
-- Sintetizzare informazioni da tutti i thread pertinenti
-- Evidenziare le connessioni più significative
-- Supportare le conclusioni con esempi specifici
-- Considerare il contesto temporale completo
-- Suggerire possibili sviluppi futuri"""
-
-    def _extract_thread_stats(self, context: str) -> dict:
-        """Estrae statistiche dettagliate dal contesto per supportare l'analisi."""
-        import re
-        from collections import defaultdict
-        from datetime import datetime
-
-        stats = {
-            "threads": defaultdict(dict),
-            "users": defaultdict(list),
-            "citations": defaultdict(list),
-            "temporal_data": defaultdict(list),
-            "keywords": defaultdict(int),
-            "sentiment_trends": defaultdict(list)
-        }
-
-        # Pattern per estrarre informazioni
-        thread_pattern = r"THREAD: (.*?)\nPosts trovati: (\d+)\nPosts dichiarati: (\d+)"
-        post_pattern = r"\[(.*?)\] (.*?)\nSentiment: ([-\d.]+)\nKeywords: (.*?)\nContent:(.*?)(?=\n\[|\Z)"
-        citation_pattern = r"(.*?) said:(.*?)Click to expand\.\.\.(.*)"
-
-        # Estrai informazioni sui thread
-        thread_matches = re.finditer(thread_pattern, context, re.DOTALL)
-        for match in thread_matches:
-            title, found, declared = match.groups()
-            thread_id = title.strip()
-            stats["threads"][thread_id] = {
-                "posts_found": int(found),
-                "posts_declared": int(declared),
-                "discrepancy": int(declared) - int(found)
-            }
-
-        # Estrai informazioni sui post
-        post_matches = re.finditer(post_pattern, context, re.DOTALL)
-        for match in post_matches:
-            timestamp, author, sentiment, keywords, content = match.groups()
-            
-            # Analisi temporale
-            try:
-                dt = datetime.strptime(timestamp.strip(), "%Y-%m-%dT%H:%M:%S%z")
-                stats["temporal_data"][dt.strftime("%Y-%m")].append({
-                    "author": author.strip(),
-                    "sentiment": float(sentiment)
-                })
-            except ValueError:
-                pass
-
-            # Analisi utenti
-            stats["users"][author.strip()].append({
-                "timestamp": timestamp.strip(),
-                "sentiment": float(sentiment),
-                "content_length": len(content.strip())
-            })
-
-            # Analisi keywords
-            for kw in keywords.split(", "):
-                if kw.strip():
-                    stats["keywords"][kw.strip()] += 1
-
-            # Analisi citazioni
-            citation_match = re.search(citation_pattern, content)
-            if citation_match:
-                quoted_author, quoted_content, actual_content = citation_match.groups()
-                stats["citations"].append({
-                    "quoting_author": author.strip(),
-                    "quoted_author": quoted_author.strip(),
-                    "timestamp": timestamp.strip(),
-                    "sentiment": float(sentiment)
-                })
-
-            # Analisi sentiment
-            stats["sentiment_trends"][timestamp[:7]].append(float(sentiment))
-
-        # Calcola statistiche aggregate
-        stats["aggregated"] = {
-            "total_threads": len(stats["threads"]),
-            "total_users": len(stats["users"]),
-            "total_citations": len(stats["citations"]),
-            "top_keywords": sorted(stats["keywords"].items(), key=lambda x: x[1], reverse=True)[:10],
-            "user_engagement": sorted(
-                [(user, len(posts)) for user, posts in stats["users"].items()],
-                key=lambda x: x[1],
-                reverse=True
-            )[:5],
-            "temporal_range": {
-                "start": min(stats["temporal_data"].keys()) if stats["temporal_data"] else None,
-                "end": max(stats["temporal_data"].keys()) if stats["temporal_data"] else None
-            }
-        }
-
-        # Calcola trend del sentiment
-        if stats["sentiment_trends"]:
-            sorted_trends = sorted(stats["sentiment_trends"].items())
-            stats["aggregated"]["sentiment_evolution"] = [
-                {
-                    "period": period,
-                    "avg_sentiment": sum(sentiments)/len(sentiments) if sentiments else 0
-                }
-                for period, sentiments in sorted_trends
-            ]
-
-        return dict(stats)  # Converti defaultdict in dict normale
+APPROFONDIMENTO:
+[Analisi dettagliata se richiesta]
+---"""
 
 def setup_rag_chain(retriever):
     """Configura RAG chain con gestione migliorata dei documenti e batch processing."""

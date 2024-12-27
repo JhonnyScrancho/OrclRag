@@ -83,8 +83,8 @@ Sentiment: {post.get('sentiment', 0)}
     
     return metadata
 
-def process_thread(thread: Dict) -> List[Dict]:
-    """Processa un thread e restituisce una lista di documenti processati."""
+def process_thread(thread: Dict) -> List[str]:
+    """Processa un thread e restituisce una lista di testi per il chunking."""
     thread_id = get_thread_id(thread)
     processed_posts = []
     
@@ -99,64 +99,17 @@ def process_thread(thread: Dict) -> List[Dict]:
         "thread_title": thread['title'],
         "url": thread['url'],
         "scrape_time": thread['scrape_time'],
-        "actual_posts": actual_posts,
-        "declared_posts": declared_posts,
-        "is_thread": True,
-        "total_posts": declared_posts
+        "actual_posts": actual_posts,  # Numero effettivo di post
+        "declared_posts": declared_posts,  # Numero dichiarato di post
+        "is_thread": True
     }
     
-    # Aggiungi metadati extra del thread se presenti
-    if 'metadata' in thread:
-        thread_metadata.update({
-            k: v for k, v in thread['metadata'].items() 
-            if k not in thread_metadata
-        })
-    
     for post in thread['posts']:
-        # Genera un ID univoco consistente
-        unique_post_id = generate_post_id(post, thread_id)
-        
-        # Estrai contenuto e citazioni
-        quote_info, actual_content = extract_quote(post.get('content', ''))
-        
-        # Metadati specifici del post
-        post_metadata = {
-            "post_id": post['post_id'],
-            "unique_post_id": unique_post_id,
-            "author": post.get('author', 'Unknown'),
-            "post_time": post.get('post_time', ''),
-            "keywords": post.get('keywords', []),
-            "sentiment": post.get('sentiment', 0.0),
-            "content_length": len(actual_content),
-            "is_post": True,
-            "text": actual_content,  # Usiamo il contenuto effettivo senza citazioni
-            "has_quote": quote_info is not None
-        }
-        
-        # Aggiungi informazioni sulla citazione se presente
-        if quote_info:
-            post_metadata.update({
-                "quoted_author": quote_info["quoted_author"],
-                "quoted_content": quote_info["quoted_content"]
-            })
-        
-        # Aggiungi metadati extra del post se presenti
-        if 'metadata' in post:
-            post_metadata.update({
-                k: v for k, v in post['metadata'].items() 
-                if k not in post_metadata
-            })
-        
-        # Combina i metadati del thread e del post
-        post_metadata.update(thread_metadata)
-        
-        processed_posts.append({
-            "id": unique_post_id,
-            "text": post_metadata["text"],
-            "metadata": post_metadata
-        })
+        metadata = extract_post_content(post, thread_id)
+        metadata.update(thread_metadata)
+        metadata["is_chunk"] = False  # Indica che questo è un post reale, non solo un chunk
+        processed_posts.append(metadata["text"])
     
-    logger.info(f"Processed {len(processed_posts)} posts for thread {thread_id}")
     return processed_posts
 
 def get_thread_id(thread: Dict) -> str:
