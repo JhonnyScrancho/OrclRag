@@ -13,14 +13,14 @@ class OpenAISwarm:
     def __init__(self):
         # Modello per analisi dei batch
         self.analysis_llm = ChatOpenAI(
-            model_name="gpt-3.5-turbo-16k",
+            model_name="gpt-3.5-turbo",
             temperature=0.3,
             api_key=st.secrets["OPENAI_API_KEY"]
         )
         
         # Modello per sintesi finale
         self.synthesis_llm = ChatOpenAI(
-            model_name="gpt-4-turbo-preview",
+            model_name="gpt-3.5-turbo",
             temperature=0.3,
             api_key=st.secrets["OPENAI_API_KEY"]
         )
@@ -122,37 +122,52 @@ class OpenAISwarm:
             logger.error(f"Error analyzing batch: {str(e)}")
             return f"Error in batch analysis: {str(e)}"
     
-    async def process_documents(self, documents: List[Document]) -> str:
-        """Processa tutti i documenti usando lo swarm di analisi."""
+    async def process_documents(self, documents: List[Document], status_container) -> str:
+        """Processa tutti i documenti usando lo swarm."""
         try:
             # Crea i batch
             batches = self.create_batches(documents)
-            logger.info(f"Created {len(batches)} batches for analysis")
+            status_container.write(f"📦 Creati {len(batches)} batch per l'analisi")
+            logger.info(f"Created {len(batches)} batches")
             
-            # Analizza i batch in parallelo
-            analysis_tasks = [self.analyze_batch(batch) for batch in batches]
-            batch_analyses = await asyncio.gather(*analysis_tasks)
+            # Crea la progress bar
+            progress_text = "🔄 Analisi batch in corso..."
+            progress_bar = status_container.progress(0, text=progress_text)
+            
+            # Analizza tutti i batch in parallelo
+            tasks = [self.analyze_batch(batch) for batch in batches]
+            batch_results = []
+            
+            for i, task in enumerate(asyncio.as_completed(tasks)):
+                result = await task
+                batch_results.append(result)
+                # Aggiorna progress bar
+                progress = (i + 1) / len(tasks)
+                progress_bar.progress(progress, text=f"{progress_text} ({i + 1}/{len(tasks)})")
+                status_container.write(f"✅ Completato batch {i + 1}/{len(tasks)}")
             
             # Sintetizza i risultati
-            synthesis_prompt = "\n\n".join([
-                "=== Analisi Batch ===\n" + analysis
-                for analysis in batch_analyses
-            ])
+            if len(batch_results) == 1:
+                status_container.write("🏁 Analisi completata!")
+                return batch_results[0]
+            
+            status_container.write("🔄 Sintetizzando i risultati...")
+            synthesis_prompt = "\n\n".join(batch_results)
             
             messages = [
-                SystemMessage(content="""Sintetizza le analisi dei vari batch in un'unica analisi coerente.
-                Identifica:
-                - Temi ricorrenti
-                - Evoluzione temporale delle discussioni
+                SystemMessage(content="""Sintetizza le analisi in un'unica risposta coerente.
+                Mantieni:
                 - Collegamenti tra thread diversi
-                - Conclusioni generali
-                Fornisci una panoramica completa e dettagliata."""),
-                HumanMessage(content=f"Analisi da sintetizzare:\n{synthesis_prompt}")
+                - Evoluzione temporale delle discussioni
+                - Citazioni rilevanti"""),
+                HumanMessage(content=synthesis_prompt)
             ]
             
-            final_response = await self.synthesis_llm.ainvoke(messages)
+            final_response = await self.batch_llm.ainvoke(messages)
+            status_container.write("🏁 Sintesi completata!")
             return final_response.content
             
         except Exception as e:
             logger.error(f"Error in swarm processing: {str(e)}")
-            return f"Error in analysis: {str(e)}"
+            status_container.error(f"❌ Errore nell'elaborazione: {str(e)}")
+            raise
