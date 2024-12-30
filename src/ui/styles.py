@@ -227,8 +227,6 @@ def render_sidebar():
     st.sidebar.markdown('<h1 class="logo-title">L\'Oracolo</h1>', unsafe_allow_html=True)
     
     # Agent Controls Section
-    st.sidebar.markdown("---")
-    st.sidebar.markdown('<div class="agent-controls">', unsafe_allow_html=True)
     st.sidebar.markdown("### 🤖 Controllo Agenti")
     
     # Number of agents slider
