@@ -10,7 +10,7 @@ import hashlib
 import time
 from datetime import datetime
 from pinecone import Pinecone
-from ui.styles import apply_custom_styles, render_sidebar
+from ui.styles import apply_custom_styles
 from config import INDEX_NAME
 import pandas as pd
 import logging
