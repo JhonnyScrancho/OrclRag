@@ -9,7 +9,15 @@ from datetime import datetime
 import tiktoken
 from concurrent.futures import ThreadPoolExecutor
 import numpy as np
-from .templates import template
+from .templates import (
+    template, 
+    analyzer_role_desc, 
+    analyzer_context_section,
+    analyzer_instructions,
+    synthesizer_role_desc,
+    synthesizer_context_section,
+    synthesizer_instructions
+)
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +52,6 @@ class OpenAISwarm:
             self.MAX_SYNTHESIS_TOKENS = 10000
             self.MAX_RETRIES = 3
             self.MAX_PARALLEL_REQUESTS = 5
-            self.base_template = template
             
         except Exception as e:
             logger.error(f"Error initializing OpenAISwarm: {str(e)}")
@@ -122,10 +129,14 @@ class OpenAISwarm:
                 author = doc.metadata.get('author', 'Unknown')
                 time = doc.metadata.get('post_time', '')
                 content = doc.page_content.strip()
+                keywords = doc.metadata.get('keywords', [])
+                sentiment = doc.metadata.get('sentiment', 0.0)
                 
                 post = f"""Thread: {thread_title}
 Author: {author}
 Time: {time}
+Keywords: {', '.join(keywords) if keywords else 'N/A'}
+Sentiment: {sentiment}
 Content: {content}
 ---"""
                 
@@ -160,9 +171,12 @@ Content: {content}
                 return None
 
             messages = [
-                SystemMessage(content=self.base_template.format(
+                SystemMessage(content=template.format(
                     agent_id=agent_id + 1,
-                    query=query
+                    role_desc=analyzer_role_desc,
+                    context_section=analyzer_context_section.format(context=formatted_content),
+                    query=query,
+                    role_instructions=analyzer_instructions
                 )),
                 HumanMessage(content=formatted_content)
             ]
@@ -196,9 +210,12 @@ Content: {content}
             ])
 
             messages = [
-                SystemMessage(content=self.base_template.format(
-                    role="sintetizzatore",
-                    query=query
+                SystemMessage(content=template.format(
+                    agent_id="S",
+                    role_desc=synthesizer_role_desc,
+                    context_section=synthesizer_context_section.format(context=synthesis_text),
+                    query=query,
+                    role_instructions=synthesizer_instructions
                 )),
                 HumanMessage(content=synthesis_text)
             ]
