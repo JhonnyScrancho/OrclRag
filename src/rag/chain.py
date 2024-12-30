@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 def setup_rag_chain(retriever):
     """Configura una chain RAG con sistema multi-agente."""
     llm = ChatOpenAI(
-        model_name="gpt-3.5-turbo-16k",  # Aumentato a 16k per gestire più contesto
+        model_name="gpt-3.5-turbo-16k",
         temperature=0.3,
         api_key=st.secrets["OPENAI_API_KEY"]
     )

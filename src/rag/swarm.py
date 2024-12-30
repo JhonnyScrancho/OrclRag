@@ -9,6 +9,7 @@ from datetime import datetime
 import tiktoken
 from concurrent.futures import ThreadPoolExecutor
 import numpy as np
+from .chain import template
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +44,7 @@ class OpenAISwarm:
             self.MAX_SYNTHESIS_TOKENS = 10000
             self.MAX_RETRIES = 3
             self.MAX_PARALLEL_REQUESTS = 5
+            self.base_template = template
             
         except Exception as e:
             logger.error(f"Error initializing OpenAISwarm: {str(e)}")
@@ -143,10 +145,10 @@ Content: {content}
             raise
 
     async def analyze_with_agent(self, 
-                               documents: List[Document], 
-                               agent_id: int,
-                               query: str,
-                               retry_count: int = 0) -> Optional[str]:
+                           documents: List[Document], 
+                           agent_id: int,
+                           query: str,
+                           retry_count: int = 0) -> Optional[str]:
         """Analizza documenti con un singolo agente."""
         if retry_count >= self.MAX_RETRIES:
             logger.error(f"Max retries ({self.MAX_RETRIES}) reached for agent #{agent_id}")
@@ -158,16 +160,10 @@ Content: {content}
                 return None
 
             messages = [
-                SystemMessage(content=f"""Sei l'agente analista #{agent_id + 1}.
-                Analizza questi post del forum relativi alla query: "{query}"
-                
-                Fornisci un'analisi che includa:
-                1. Principali temi discussi
-                2. Opinioni e sentiment prevalenti
-                3. Trend e cambiamenti temporali
-                4. Citazioni rilevanti (se presenti)
-                
-                Mantieni l'analisi concisa e rilevante."""),
+                SystemMessage(content=self.base_template.format(
+                    agent_id=agent_id + 1,
+                    query=query
+                )),
                 HumanMessage(content=formatted_content)
             ]
             
@@ -182,41 +178,28 @@ Content: {content}
             return None
 
     async def synthesize_analyses(self, 
-                                analyses: List[str], 
-                                query: str,
-                                retry_count: int = 0) -> str:
+                            analyses: List[str], 
+                            query: str,
+                            retry_count: int = 0) -> str:
         """Sintetizza le analisi degli agenti."""
         if retry_count >= self.MAX_RETRIES:
             return "Non è stato possibile completare la sintesi dei risultati."
 
         try:
-            # Filtra e limita i risultati
             valid_analyses = [a for a in analyses if a and a.strip()]
             if not valid_analyses:
                 return "Nessuna analisi valida da sintetizzare."
 
-            # Prepara il contenuto per la sintesi
-            synthesis_text = ""
-            current_tokens = 0
-            
-            for i, analysis in enumerate(valid_analyses):
-                result_tokens = self.count_tokens(analysis)
-                if current_tokens + result_tokens <= self.MAX_SYNTHESIS_TOKENS:
-                    synthesis_text += f"\n\n--- Analisi Agente #{i+1} ---\n{analysis}"
-                    current_tokens += result_tokens
-                else:
-                    break
+            synthesis_text = "\n\n".join([
+                f"--- Analisi Agente #{i+1} ---\n{analysis}"
+                for i, analysis in enumerate(valid_analyses)
+            ])
 
             messages = [
-                SystemMessage(content=f"""Sei l'agente sintetizzatore.
-                Combina le analisi degli agenti in una risposta coerente e completa.
-                Query originale: "{query}"
-                
-                La sintesi deve:
-                1. Rispondere direttamente alla query
-                2. Evidenziare i principali trend e pattern
-                3. Supportare le conclusioni con citazioni specifiche
-                4. Essere organizzata e strutturata chiaramente"""),
+                SystemMessage(content=self.base_template.format(
+                    role="sintetizzatore",
+                    query=query
+                )),
                 HumanMessage(content=synthesis_text)
             ]
             
