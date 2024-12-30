@@ -467,7 +467,7 @@ def render_sidebar():
         num_agents = st.selectbox(
             "Numero di agenti",
             options=[1, 2, 3],
-            value=3,
+            index=2,
             help="Seleziona il numero di agenti da utilizzare per l'analisi"
         )
         st.session_state.num_agents = num_agents
