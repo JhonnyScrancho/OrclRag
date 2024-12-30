@@ -9,9 +9,9 @@ import asyncio
 logger = logging.getLogger(__name__)
 
 def setup_rag_chain(retriever):
-    """Configura una chain RAG semplificata che sfrutta le capacità di comprensione del LLM."""
+    """Configura una chain RAG con sistema multi-agente."""
     llm = ChatOpenAI(
-        model_name="gpt-3.5-turbo",
+        model_name="gpt-3.5-turbo-16k",  # Aumentato a 16k per gestire più contesto
         temperature=0.3,
         api_key=st.secrets["OPENAI_API_KEY"]
     )
@@ -41,7 +41,6 @@ Linee guida per la formattazione:
 - Usa 📉 per trend negativi
 - Usa 💡 per intuizioni chiave
 - Usa ⚠️ per warning o problemi identificati
-
 
 Dati del forum:
 {context}
@@ -74,8 +73,9 @@ REGOLE:
                     logger.warning("No documents found in database")
                     return {"result": "Non ho trovato dati sufficienti per rispondere."}
                 
-                st.write(f"📚 Recuperati {len(docs)} documenti dal database")
-                logger.info(f"Retrieved {len(docs)} documents from the database")
+                num_docs = len(docs)
+                st.write(f"📚 Recuperati {num_docs} documenti dal database")
+                logger.info(f"Retrieved {num_docs} documents from the database")
                 
                 # Log dettagliato dei documenti recuperati
                 logger.info("Document details:")
@@ -91,19 +91,20 @@ REGOLE:
                         asyncio.set_event_loop(loop)
                     
                     # Processa i documenti con lo swarm
-                    st.write("🔄 Avvio elaborazione parallela con swarm...")
-                    result = loop.run_until_complete(swarm.process_documents(docs, status))
+                    num_agents = st.session_state.get('num_agents', 3)
+                    st.write(f"🤖 Avvio elaborazione con {num_agents} agenti...")
+                    result = loop.run_until_complete(swarm.process_documents(docs, query, status))
                     
                     if not result:
-                        raise ValueError("Empty result from swarm processing")
+                        raise ValueError("Empty result from multi-agent processing")
                         
                     status.update(label="✅ Analisi completata!", state="complete")
                     return {"result": result}
                     
                 except Exception as e:
-                    # Se lo swarm fallisce, usa il metodo standard
-                    logger.warning(f"Swarm processing failed: {str(e)}. Falling back to standard processing.")
-                    st.write("⚠️ Swarm non disponibile, utilizzo metodo standard...")
+                    # Se il processing multi-agente fallisce, usa il metodo standard
+                    logger.warning(f"Multi-agent processing failed: {str(e)}. Falling back to standard processing.")
+                    st.write("⚠️ Elaborazione multi-agente non disponibile, utilizzo metodo standard...")
                     
                     # Prepara il contesto come una sequenza temporale di post
                     posts_context = []
@@ -140,7 +141,7 @@ REGOLE:
                     
                     # Ottieni la risposta dal LLM
                     try:
-                        st.write("🤔 Elaborazione risposta...")
+                        st.write("🤔 Elaborazione risposta standard...")
                         response = llm.invoke(messages)
                         if not response or not hasattr(response, 'content'):
                             raise ValueError("Invalid response from LLM")

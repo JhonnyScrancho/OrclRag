@@ -153,6 +153,29 @@ def apply_custom_styles():
                 height: 1px;
                 background: linear-gradient(to right, transparent, #e0e0e0, transparent);
             }
+
+            /* Agent control section */
+            .agent-controls {
+                background-color: #ffffff;
+                padding: 1rem;
+                border-radius: 10px;
+                margin: 1rem 0;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            }
+            
+            .agent-controls h3 {
+                color: #1f77b4;
+                font-size: 1.2em;
+                margin-bottom: 1rem;
+            }
+            
+            .token-info {
+                background-color: #e9ecef;
+                padding: 0.5rem;
+                border-radius: 5px;
+                margin-top: 0.5rem;
+                font-size: 0.9em;
+            }
             
             /* Animation keyframes */
             @keyframes rainbow {
@@ -182,10 +205,14 @@ def apply_custom_styles():
     """, unsafe_allow_html=True)
 
 def render_sidebar():
-    """Render the sidebar with logo and navigation."""
+    """Render the sidebar with logo, navigation, and agent controls."""
     # Initialize session state if not exists
     if 'current_page' not in st.session_state:
         st.session_state.current_page = "💬 Chat"
+    if 'num_agents' not in st.session_state:
+        st.session_state.num_agents = 3
+    if 'show_agent_details' not in st.session_state:
+        st.session_state.show_agent_details = False
         
     def nav_to(page):
         st.session_state.current_page = page
@@ -198,6 +225,34 @@ def render_sidebar():
     
     # Title under logo
     st.sidebar.markdown('<h1 class="logo-title">L\'Oracolo</h1>', unsafe_allow_html=True)
+    
+    # Agent Controls Section
+    st.sidebar.markdown("---")
+    st.sidebar.markdown('<div class="agent-controls">', unsafe_allow_html=True)
+    st.sidebar.markdown("### 🤖 Controllo Agenti")
+    
+    # Number of agents slider
+    num_agents = st.sidebar.slider(
+        "Numero di agenti analisti",
+        min_value=3,
+        max_value=10,
+        value=st.session_state.num_agents,
+        step=1,
+        help="Aumenta il numero di agenti se l'analisi va in overflow di token"
+    )
+    if num_agents != st.session_state.num_agents:
+        st.session_state.num_agents = num_agents
+    
+    # Show agent details toggle
+    show_details = st.sidebar.toggle(
+        "Mostra dettagli analisi",
+        value=st.session_state.show_agent_details,
+        help="Visualizza l'output di ogni singolo agente"
+    )
+    if show_details != st.session_state.show_agent_details:
+        st.session_state.show_agent_details = show_details
+    
+    st.sidebar.markdown('</div>', unsafe_allow_html=True)
     
     # Navigation menu
     st.sidebar.markdown("---")
@@ -215,7 +270,7 @@ def render_sidebar():
             </style>
         ''', unsafe_allow_html=True)
         
-        if st.sidebar.button(page, key=f"nav_{page}", use_container_width=True, type="primary", kwargs={"kind": page}):
+        if st.sidebar.button(page, key=f"nav_{page}", use_container_width=True):
             nav_to(page)
     
     # File uploader section
