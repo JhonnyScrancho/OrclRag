@@ -1,0 +1,46 @@
+# File di sistema macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+
+# File di cache Python
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+*.so
+
+# Ambiente virtuale
+venv/
+env/
+ENV/
+
+# File di Streamlit
+.streamlit/secrets.toml
+.streamlit/config.toml
+
+# File di distribuzione
+dist/
+build/
+*.egg-info/
+
+# File di IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# File di log
+*.log
+
+# File temporanei
+*.tmp
+*.bak
+*.swp
+*~
+
+# File di ambiente
+.env
+.env.* 
