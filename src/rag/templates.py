@@ -37,38 +37,35 @@ REGOLE:
 5. Non fare analisi non richieste""" 
 
 # Template per gli agenti analizzatori
-analyzer_role_desc = """Hai il compito di analizzare una porzione dei dati del forum e fornire un'analisi dettagliata.
-Presta particolare attenzione a:
-1. Le parole chiave (keywords) associate a ogni post
-2. Il sentimento espresso (sentiment: numero da -1 a 1, dove -1 è molto negativo, 0 è neutro, 1 è molto positivo)
-3. Come questi elementi si collegano al contesto generale della discussione"""
+analyzer_role_desc = """Hai il compito di analizzare una porzione dei dati del forum e fornire un'analisi precisa e diretta.
+Se la domanda richiede:
+- Un numero specifico → Fornisci prima il numero esatto, poi eventuali dettagli
+- Una lista → Elenca gli elementi richiesti in modo chiaro
+- Un'analisi → Fornisci l'analisi richiesta
+Non aggiungere informazioni non richieste."""
 
 analyzer_context_section = """Dati del forum da analizzare:
 {context}"""
 
-analyzer_instructions = """Fornisci un'analisi concisa e pertinente in italiano della tua porzione di dati, citando le parti rilevanti quando appropriato.
-Nel tuo report, includi:
-1. Un'analisi delle parole chiave più rilevanti
-2. Una valutazione del sentimento generale dei post
-3. Come questi elementi supportano la tua analisi
-
-Quando citi un post, usa il formato: "[Autore] ha scritto: '...'"""
+analyzer_instructions = """Analizza i dati forniti e rispondi SOLO a ciò che viene chiesto.
+- Per domande numeriche (quanti, quante volte, etc.) → Inizia SEMPRE con il numero
+- Per domande di lista → Elenca gli elementi richiesti
+- Per domande di analisi → Fornisci l'analisi pertinente
+NON aggiungere informazioni non richieste dalla domanda."""
 
 # Template per l'agente sintetizzatore
-synthesizer_role_desc = """Sei l'agente sintetizzatore. Il tuo compito è combinare e sintetizzare le analisi degli altri agenti.
-Presta particolare attenzione a:
-1. Pattern ricorrenti nelle parole chiave tra le diverse analisi
-2. Tendenze nel sentimento attraverso i diversi gruppi di post
-3. Come questi elementi contribuiscono alla comprensione generale della discussione"""
+synthesizer_role_desc = """Sei l'agente sintetizzatore. Il tuo compito è combinare le analisi degli altri agenti in una risposta precisa e diretta.
+Se la domanda richiede:
+- Un numero → Combina i conteggi degli agenti e fornisci il totale esatto
+- Una lista → Unisci le liste eliminando i duplicati
+- Un'analisi → Sintetizza le analisi in modo coerente
+NON aggiungere informazioni non richieste."""
 
 synthesizer_context_section = """Analisi degli altri agenti:
 {context}"""
 
-synthesizer_instructions = """Sintetizza le analisi degli altri agenti in una risposta coerente e completa in italiano.
-Nel tuo report finale, includi:
-1. Una sintesi delle parole chiave più significative emerse dalle analisi
-2. Un'analisi dell'evoluzione del sentimento nella discussione
-3. Come questi elementi supportano le tue conclusioni
-
-Evidenzia i punti di accordo e le eventuali discrepanze tra le analisi.
-Assicurati di mantenere le citazioni rilevanti dal forum.""" 
+synthesizer_instructions = """Sintetizza le analisi degli agenti in una risposta che risponda ESATTAMENTE alla domanda posta.
+- Per domande numeriche → Fornisci il numero totale combinando i risultati degli agenti
+- Per domande di lista → Unisci le liste senza duplicati
+- Per domande di analisi → Sintetizza le analisi pertinenti
+NON includere informazioni non richieste dalla domanda.""" 

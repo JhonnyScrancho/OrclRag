@@ -118,9 +118,58 @@ class OpenAISwarm:
             logger.error(f"Error splitting documents for agents: {str(e)}")
             raise
 
+    def get_thread_stats(self, documents: List[Document]) -> Dict[str, Any]:
+        """Calcola le statistiche dei thread."""
+        try:
+            thread_ids = set()
+            thread_titles = set()
+            posts_per_thread = {}
+            
+            for doc in documents:
+                thread_id = doc.metadata.get('thread_id', 'unknown')
+                thread_title = doc.metadata.get('thread_title', 'Unknown Thread')
+                
+                thread_ids.add(thread_id)
+                thread_titles.add(thread_title)
+                
+                if thread_id not in posts_per_thread:
+                    posts_per_thread[thread_id] = 0
+                posts_per_thread[thread_id] += 1
+            
+            return {
+                "num_threads": len(thread_ids),
+                "thread_titles": list(thread_titles),
+                "total_posts": len(documents),
+                "avg_posts_per_thread": len(documents) / len(thread_ids) if thread_ids else 0
+            }
+        except Exception as e:
+            logger.error(f"Error calculating thread stats: {str(e)}")
+            return {
+                "num_threads": 0,
+                "thread_titles": [],
+                "total_posts": 0,
+                "avg_posts_per_thread": 0
+            }
+
     def format_documents(self, documents: List[Document]) -> str:
         """Formatta i documenti per l'analisi."""
         try:
+            # Calcola le statistiche prima di formattare
+            stats = self.get_thread_stats(documents)
+            
+            # Aggiungi l'header con le statistiche
+            header = f"""📊 Statistiche Globali:
+- Numero totale di thread: {stats['num_threads']}
+- Numero totale di post: {stats['total_posts']}
+- Media post per thread: {stats['avg_posts_per_thread']:.1f}
+
+🧵 Thread analizzati:
+{chr(10).join(f"- {title}" for title in stats['thread_titles'])}
+
+---
+📝 Dettaglio dei post:
+"""
+            
             formatted_posts = []
             total_tokens = 0
             
@@ -149,7 +198,7 @@ Content: {content}
                 else:
                     break
             
-            return "\n\n".join(formatted_posts)
+            return header + "\n\n".join(formatted_posts)
             
         except Exception as e:
             logger.error(f"Error formatting documents: {str(e)}")
