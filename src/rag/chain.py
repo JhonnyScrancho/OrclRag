@@ -1,7 +1,6 @@
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, SystemMessage
 import streamlit as st
-import json
 import logging
 from datetime import datetime
 from .swarm import OpenAISwarm
@@ -71,12 +70,12 @@ REGOLE:
                 
                 # Ottieni i documenti rilevanti
                 docs = retriever.get_relevant_documents(query)
-                st.write(f"📚 Recuperati {len(docs)} documenti dal database")
-                logger.info(f"Retrieved {len(docs)} documents from the database")
-                
                 if not docs:
                     logger.warning("No documents found in database")
                     return {"result": "Non ho trovato dati sufficienti per rispondere."}
+                
+                st.write(f"📚 Recuperati {len(docs)} documenti dal database")
+                logger.info(f"Retrieved {len(docs)} documents from the database")
                 
                 # Log dettagliato dei documenti recuperati
                 logger.info("Document details:")
@@ -94,6 +93,10 @@ REGOLE:
                     # Processa i documenti con lo swarm
                     st.write("🔄 Avvio elaborazione parallela con swarm...")
                     result = loop.run_until_complete(swarm.process_documents(docs, status))
+                    
+                    if not result:
+                        raise ValueError("Empty result from swarm processing")
+                        
                     status.update(label="✅ Analisi completata!", state="complete")
                     return {"result": result}
                     
@@ -139,6 +142,9 @@ REGOLE:
                     try:
                         st.write("🤔 Elaborazione risposta...")
                         response = llm.invoke(messages)
+                        if not response or not hasattr(response, 'content'):
+                            raise ValueError("Invalid response from LLM")
+                            
                         logger.info("LLM response received successfully")
                         status.update(label="✅ Analisi completata!", state="complete")
                         return {"result": response.content}
@@ -150,3 +156,5 @@ REGOLE:
         except Exception as e:
             logger.error(f"Error in RAG chain: {str(e)}")
             return {"result": f"Errore nell'elaborazione: {str(e)}"}
+
+    return get_response
