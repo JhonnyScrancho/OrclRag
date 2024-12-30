@@ -268,11 +268,21 @@ def display_database_view(index):
     
     try:
         stats = index.describe_index_stats()
+        
+        # Calcola il numero di thread unici
+        results = index.query(
+            vector=[1.0] + [0.0] * (stats['dimension'] - 1),
+            top_k=10000,
+            include_metadata=True
+        )
+        
+        unique_threads = len(set(doc.metadata.get('thread_id', '') for doc in results.matches))
+        
         col1, col2 = st.columns(2)
         with col1:
             st.metric("Total Documents", stats['total_vector_count'])
         with col2:
-            st.metric("Dimension", stats['dimension'])
+            st.metric("Total Threads", unique_threads)
             
     except Exception as e:
         st.error(f"Error retrieving database stats: {str(e)}")
