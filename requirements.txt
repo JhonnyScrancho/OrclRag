@@ -12,5 +12,3 @@ dnspython>=2.4.0
 sentence-transformers
 aiohttp>=3.9.0
 asyncio>=3.4.3
-pandas
-plotly
