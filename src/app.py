@@ -239,15 +239,15 @@ def display_chat_interface(index, embeddings):
         
         try:
             retriever = SmartRetriever(index, embeddings)
-            chain = setup_rag_chain(retriever)
+            chain = setup_rag_chain(retriever, num_agents=st.session_state.num_agents)
             
             with st.chat_message("assistant", avatar="🧚"):
                 with st.spinner("Sto creando..."):
-                    response = chain({"query": prompt})
-                    st.markdown(response["result"])
+                    response = chain["get_response"](prompt)
+                    st.markdown(response)
             
             st.session_state.messages.append(
-                {"role": "assistant", "content": response["result"]}
+                {"role": "assistant", "content": response}
             )
         except Exception as e:
             st.error(f"Error generating response: {str(e)}")
@@ -457,6 +457,35 @@ def process_uploaded_file(uploaded_file, index, embeddings):
                         progress.progress((i + 1) / len(data))
                     
                     st.success(f"Processed {len(data)} threads and created {total_chunks} chunks")
+
+def render_sidebar():
+    """Render della sidebar."""
+    with st.sidebar:
+        st.title("🔮 L'Oracolo")
+        
+        # Selezione numero agenti
+        num_agents = st.selectbox(
+            "Numero di agenti",
+            options=[1, 2, 3],
+            value=3,
+            help="Seleziona il numero di agenti da utilizzare per l'analisi"
+        )
+        st.session_state.num_agents = num_agents
+        
+        # Tabs
+        tabs = ["💬 Chat", "📊 Database", "⚙️ Settings"]
+        selected = st.radio("Navigation", tabs)
+        
+        # File uploader
+        uploaded_file = None
+        if "Database" in selected:
+            uploaded_file = st.file_uploader(
+                "Carica file JSON",
+                type=['json'],
+                help="Seleziona un file JSON contenente i thread da processare"
+            )
+            
+        return selected, uploaded_file
 
 def main():
     # Apply custom styles
