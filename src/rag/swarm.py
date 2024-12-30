@@ -9,7 +9,7 @@ from datetime import datetime
 import tiktoken
 from concurrent.futures import ThreadPoolExecutor
 import numpy as np
-from chain import template
+from .templates import template
 
 logger = logging.getLogger(__name__)
 

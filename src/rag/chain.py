@@ -4,6 +4,7 @@ import streamlit as st
 import logging
 from datetime import datetime
 from .swarm import OpenAISwarm
+from .templates import template
 import asyncio
 
 logger = logging.getLogger(__name__)
@@ -17,45 +18,6 @@ def setup_rag_chain(retriever):
     )
 
     swarm = OpenAISwarm()
-    
-    template = """Sei un assistente esperto nell'analisi di conversazioni dei forum. Hai accesso ai dati di un thread del forum.
-Nel rispondere, presta particolare attenzione a:
-1. Identificare e utilizzare le citazioni presenti (formato "utente said: contenuto")
-2. Comprendere il flusso della conversazione e chi risponde a chi
-3. Interpretare correttamente il contesto temporale dei post
-4. Evidenziare le citazioni rilevanti quando rispondi
-
-Usa la formattazione Markdown e HTML per rendere le tue risposte più leggibili ed estetiche.
-Linee guida per la formattazione:
-- Usa **grassetto** per enfatizzare concetti importanti
-- Usa *corsivo* per termini specifici o citazioni brevi
-- Usa `codice inline` per termini tecnici
-- Usa > per le citazioni dei post del forum
-- Usa --- per separare sezioni diverse
-- Usa emoji appropriate per rendere il testo più espressivo
-- Usa <details> per contenuti collassabili
-- Usa tabelle Markdown per dati strutturati
-- Usa # ## ### per titoli di diverse dimensioni
--Usa 🔍 per evidenziare scoperte importanti
-- Usa 📈 per trend positivi
-- Usa 📉 per trend negativi
-- Usa 💡 per intuizioni chiave
-- Usa ⚠️ per warning o problemi identificati
-
-Dati del forum:
-{context}
-
-Domanda: {query}
-
-Fornisci una risposta concisa e pertinente in italiano, citando le parti rilevanti della conversazione quando appropriato.
-Quando citi un post, usa il formato: "[Autore] ha scritto: '...'
-
-REGOLE:
-1. Rispondi SOLO a ciò che viene chiesto
-2. Sii breve e diretto
-3. Per domande numeriche, dai prima il numero e poi solo insight essenziali
-4. Se rilevi citazioni, indicale esplicitamente usando il formato > 
-5. Non fare analisi non richieste"""
     
     def get_response(query_input):
         try:
@@ -100,7 +62,7 @@ REGOLE:
                         
                     status.update(label="✅ Analisi completata!", state="complete")
                     return {"result": result}
-                    
+
                 except Exception as e:
                     # Se il processing multi-agente fallisce, usa il metodo standard
                     logger.warning(f"Multi-agent processing failed: {str(e)}. Falling back to standard processing.")
@@ -126,7 +88,7 @@ REGOLE:
                     
                     # Aggiungi il titolo del thread al contesto
                     thread_title = posts_context[0]["thread_title"] if posts_context else "Unknown Thread"
-                    
+
                     # Formatta il contesto come una conversazione
                     context = f"Thread: {thread_title}\n\n" + "\n\n".join([
                         f"[{post['time']}] {post['author']}:\n{post['content']}"
@@ -153,7 +115,7 @@ REGOLE:
                         logger.error(f"Error getting LLM response: {str(e)}")
                         status.update(label="❌ Errore nell'analisi", state="error")
                         return {"result": f"Errore nella generazione della risposta: {str(e)}"}
-            
+
         except Exception as e:
             logger.error(f"Error in RAG chain: {str(e)}")
             return {"result": f"Errore nell'elaborazione: {str(e)}"}
