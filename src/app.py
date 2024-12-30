@@ -14,6 +14,7 @@ from ui.styles import apply_custom_styles, render_sidebar
 from config import INDEX_NAME
 import pandas as pd
 import logging
+import plotly.express as px
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -448,6 +449,91 @@ def process_uploaded_file(uploaded_file, index, embeddings):
                     
                     st.success(f"Processed {len(data)} threads and created {total_chunks} chunks")
 
+def display_thread_stats(index, embeddings):
+    """Visualizza statistiche in tempo reale dei thread nel database."""
+    try:
+        # Crea un retriever per accedere ai documenti
+        retriever = SmartRetriever(index, embeddings)
+        docs = retriever.get_all_documents()
+        
+        if not docs:
+            st.warning("Nessun documento nel database")
+            return
+
+        # Raggruppa i documenti per thread
+        threads = {}
+        for doc in docs:
+            thread_id = doc.metadata.get('thread_id', 'unknown')
+            if thread_id not in threads:
+                threads[thread_id] = {
+                    'title': doc.metadata.get('thread_title', 'Unknown Thread'),
+                    'posts': [],
+                    'first_post': doc.metadata.get('post_time', ''),
+                    'last_post': doc.metadata.get('post_time', ''),
+                    'authors': set()
+                }
+            thread = threads[thread_id]
+            thread['posts'].append(doc)
+            thread['authors'].add(doc.metadata.get('author', 'Unknown'))
+            post_time = doc.metadata.get('post_time', '')
+            if post_time < thread['first_post'] or not thread['first_post']:
+                thread['first_post'] = post_time
+            if post_time > thread['last_post']:
+                thread['last_post'] = post_time
+
+        # Crea il layout della dashboard
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            st.metric("🧵 Thread Totali", len(threads))
+        
+        with col2:
+            total_posts = sum(len(t['posts']) for t in threads.values())
+            st.metric("📝 Post Totali", total_posts)
+        
+        with col3:
+            avg_posts = total_posts / len(threads) if threads else 0
+            st.metric("📊 Media Post per Thread", f"{avg_posts:.1f}")
+
+        # Grafico temporale dei thread
+        st.subheader("📈 Distribuzione Temporale Thread")
+        
+        # Prepara i dati per il grafico
+        thread_dates = []
+        for thread in threads.values():
+            try:
+                date = datetime.fromisoformat(thread['first_post']).date()
+                thread_dates.append(date)
+            except (ValueError, TypeError):
+                continue
+        
+        if thread_dates:
+            # Crea un DataFrame per il grafico
+            df = pd.DataFrame({'date': thread_dates})
+            df['count'] = 1
+            df = df.groupby('date').sum().reset_index()
+            
+            # Crea il grafico
+            fig = px.line(df, x='date', y='count', 
+                         title='Numero di Thread nel Tempo',
+                         labels={'date': 'Data', 'count': 'Numero Thread'})
+            st.plotly_chart(fig, use_container_width=True)
+
+        # Thread più attivi
+        st.subheader("🔥 Thread più Attivi")
+        active_threads = sorted(threads.values(), 
+                              key=lambda x: len(x['posts']), 
+                              reverse=True)[:5]
+        
+        for thread in active_threads:
+            with st.expander(f"{thread['title']} ({len(thread['posts'])} posts)"):
+                st.write(f"👥 Partecipanti: {len(thread['authors'])}")
+                st.write(f"📅 Primo post: {thread['first_post']}")
+                st.write(f"🔄 Ultimo post: {thread['last_post']}")
+
+    except Exception as e:
+        st.error(f"Errore nel caricamento delle statistiche: {str(e)}")
+
 def main():
     # Apply custom styles
     apply_custom_styles()
@@ -473,7 +559,8 @@ def main():
             display_chat_interface(index, embeddings)
             
         elif "Database" in selected:
-            display_database_view(index)
+            st.markdown("## 📊 Statistiche Database")
+            display_thread_stats(index, embeddings)
             
         else:  # Settings
             st.markdown("## ⚙️ Settings")

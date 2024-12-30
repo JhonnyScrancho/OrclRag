@@ -85,32 +85,53 @@ class OpenAISwarm:
             return text[:max_tokens * 4]  # Fallback approssimativo
 
     def split_documents_for_agents(self, documents: List[Document], num_agents: int) -> List[List[Document]]:
-        """Divide i documenti equamente tra gli agenti."""
+        """Divide i documenti equamente tra gli agenti mantenendo i thread intatti."""
         try:
             if not documents:
                 return []
 
-            # Ordina i documenti per timestamp per mantenere la coerenza temporale
-            sorted_docs = sorted(
-                documents,
-                key=lambda x: datetime.fromisoformat(x.metadata.get('post_time', '1970-01-01T00:00:00+00:00'))
+            # Raggruppa i documenti per thread_id
+            threads = {}
+            for doc in documents:
+                thread_id = doc.metadata.get('thread_id', 'unknown')
+                if thread_id not in threads:
+                    threads[thread_id] = []
+                threads[thread_id].append(doc)
+            
+            # Ordina i thread per timestamp del primo post
+            sorted_threads = sorted(
+                threads.values(),
+                key=lambda x: datetime.fromisoformat(x[0].metadata.get('post_time', '1970-01-01T00:00:00+00:00'))
             )
 
-            # Calcola la dimensione di ogni porzione
-            chunk_size = len(sorted_docs) // num_agents
-            if chunk_size == 0:
-                chunk_size = 1
+            # Calcola il numero approssimativo di thread per agente
+            threads_per_agent = len(sorted_threads) // num_agents
+            if threads_per_agent == 0:
+                threads_per_agent = 1
 
-            # Divide i documenti in porzioni
+            # Distribuisci i thread tra gli agenti
             agent_docs = []
-            for i in range(0, len(sorted_docs), chunk_size):
-                end_idx = i + chunk_size
-                if i >= len(sorted_docs):
-                    break
-                if end_idx >= len(sorted_docs) or len(agent_docs) == num_agents - 1:
-                    agent_docs.append(sorted_docs[i:])
-                    break
-                agent_docs.append(sorted_docs[i:end_idx])
+            current_agent_docs = []
+            current_thread_count = 0
+
+            for thread_posts in sorted_threads:
+                current_agent_docs.extend(thread_posts)
+                current_thread_count += 1
+
+                # Se questo agente ha abbastanza thread e non è l'ultimo agente
+                if current_thread_count >= threads_per_agent and len(agent_docs) < num_agents - 1:
+                    agent_docs.append(current_agent_docs)
+                    current_agent_docs = []
+                    current_thread_count = 0
+
+            # Aggiungi i thread rimanenti all'ultimo agente
+            if current_agent_docs:
+                agent_docs.append(current_agent_docs)
+
+            # Log della distribuzione
+            for i, docs in enumerate(agent_docs):
+                thread_ids = set(doc.metadata.get('thread_id', 'unknown') for doc in docs)
+                logger.info(f"Agent #{i+1}: {len(thread_ids)} threads, {len(docs)} posts")
 
             return agent_docs
 
