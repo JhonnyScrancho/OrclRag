@@ -168,21 +168,57 @@ Content: {content}
         try:
             formatted_content = self.format_documents(documents)
             if not formatted_content.strip():
+                logger.warning(f"Agent #{agent_id}: Empty formatted content")
                 return None
 
+            # Calcola i token del contenuto formattato
+            content_tokens = self.count_tokens(formatted_content)
+            logger.info(f"Agent #{agent_id}: Content tokens: {content_tokens}")
+
+            # Prepara il messaggio di sistema
+            system_message = template.format(
+                agent_id=agent_id + 1,
+                role_desc=analyzer_role_desc,
+                context_section=analyzer_context_section.format(context="[CONTEXT]"),  # Placeholder
+                query=query,
+                role_instructions=analyzer_instructions
+            )
+            system_tokens = self.count_tokens(system_message)
+            logger.info(f"Agent #{agent_id}: System message tokens: {system_tokens}")
+
+            # Verifica se il totale dei token è entro il limite
+            total_tokens = content_tokens + system_tokens
+            available_tokens = self.MAX_TOKENS_PER_REQUEST - 4000  # Riserva 4000 token per la risposta
+            
+            if total_tokens > available_tokens:
+                logger.warning(f"Agent #{agent_id}: Token limit exceeded. Total: {total_tokens}, Available: {available_tokens}")
+                # Tronca il contenuto se necessario
+                max_content_tokens = available_tokens - system_tokens
+                formatted_content = self.truncate_to_token_limit(formatted_content, max_content_tokens)
+                logger.info(f"Agent #{agent_id}: Content truncated to {self.count_tokens(formatted_content)} tokens")
+
+            # Costruisci il messaggio finale
+            system_message = template.format(
+                agent_id=agent_id + 1,
+                role_desc=analyzer_role_desc,
+                context_section=analyzer_context_section.format(context=formatted_content),
+                query=query,
+                role_instructions=analyzer_instructions
+            )
+
             messages = [
-                SystemMessage(content=template.format(
-                    agent_id=agent_id + 1,
-                    role_desc=analyzer_role_desc,
-                    context_section=analyzer_context_section.format(context=formatted_content),
-                    query=query,
-                    role_instructions=analyzer_instructions
-                )),
-                HumanMessage(content=formatted_content)
+                SystemMessage(content=system_message)
             ]
             
+            logger.info(f"Agent #{agent_id}: Sending request to OpenAI")
             response = await self.analyzer_llm.ainvoke(messages)
-            return response.content if response else None
+            
+            if not response or not response.content:
+                logger.warning(f"Agent #{agent_id}: Empty response from OpenAI")
+                return None
+                
+            logger.info(f"Agent #{agent_id}: Successfully received response")
+            return response.content
             
         except Exception as e:
             logger.error(f"Error in agent #{agent_id} analysis (attempt {retry_count + 1}): {str(e)}")
